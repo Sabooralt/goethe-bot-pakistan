@@ -1,6 +1,11 @@
 import mongoose from "mongoose";
 
-const userSchema = new mongoose.Schema(
+export interface UserDocument extends Document {
+  telegramId: string;
+  username?: string;
+}
+
+const userSchema = new mongoose.Schema<UserDocument>(
   {
     telegramId: {
       type: String,

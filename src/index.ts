@@ -15,6 +15,7 @@ interface States {
   REMOVING_ACCOUNT: string;
   TOGGLING_ACCOUNT: string;
   ADDING_PERSONAL_DETAILS: string;
+  SELECTING_MODULES: string;
   SETTING_SCHEDULE: string;
   SETTING_SCHEDULE_TIME: string;
   SETTING_SCHEDULE_DATE: string;
@@ -44,6 +45,7 @@ const STATES: States = {
   REMOVING_ACCOUNT: "removing_account",
   TOGGLING_ACCOUNT: "toggling_account",
   ADDING_PERSONAL_DETAILS: "adding_personal_details",
+  SELECTING_MODULES: "selecting_modules",
   SETTING_SCHEDULE: "setting_schedule",
   SETTING_SCHEDULE_TIME: "setting_schedule_time",
   SETTING_SCHEDULE_DATE: "setting_schedule_date",
@@ -69,13 +71,13 @@ export const bot = new TelegramBot(token, { polling: true });
       });
 
       if (schedulerRunning) return;
-      schedulerRunning = true;
+      /* schedulerRunning = true;
 
       console.log("🚀 Starting scheduler...");
 
       setInterval(async () => {
         try {
-          const adjustedNow = new Date(Date.now() + 60 * 1000); // Run 1 min earlier
+          const adjustedNow = new Date(Date.now() + 60 * 1000);
           const dueSchedules = await Schedule.find({
             runAt: { $lte: adjustedNow },
             completed: false,
@@ -103,7 +105,7 @@ export const bot = new TelegramBot(token, { polling: true });
         } catch (error) {
           console.error("Scheduler error:", error);
         }
-      }, 60000);
+      }, 6000); */
     } catch (err) {
       console.error("❌ Startup error:", err);
     }
@@ -164,13 +166,6 @@ export const bot = new TelegramBot(token, { polling: true });
     const chatId = msg.chat.id;
     const userId = msg.from?.id?.toString();
     const username = msg.from?.username;
-
-    await bot.editMessageReplyMarkup(
-      { inline_keyboard: [] },
-      {
-        chat_id: chatId,
-      }
-    );
 
     if (!userId) return;
 
@@ -257,6 +252,14 @@ export const bot = new TelegramBot(token, { polling: true });
             userState
           );
           break;
+        case STATES.SELECTING_MODULES:
+          await handleModuleSelectionMessage(
+            chatId,
+            userId,
+            msg.text,
+            userState
+          );
+          break;
         case STATES.REMOVING_ACCOUNT:
           await handleRemoveAccountMessage(chatId, userId, msg.text);
           break;
@@ -266,7 +269,6 @@ export const bot = new TelegramBot(token, { polling: true });
         case STATES.SETTING_SCHEDULE:
           await handleScheduleCreation(chatId, userId, msg.text);
           break;
-
         case STATES.REMOVING_SCHEDULE:
           await handleRemoveScheduleMessage(chatId, userId, msg.text);
           break;
@@ -289,8 +291,9 @@ export const bot = new TelegramBot(token, { polling: true });
     const chatId = callbackQuery.message?.chat.id;
     const userId = callbackQuery.from.id.toString();
     const data = callbackQuery.data;
+    const messageId = callbackQuery.message?.message_id;
 
-    if (!chatId) return;
+    if (!chatId || !messageId) return;
 
     await bot.answerCallbackQuery(callbackQuery.id);
 
@@ -304,7 +307,10 @@ export const bot = new TelegramBot(token, { polling: true });
       const userState = getUserState(userId);
       switch (userState.state) {
         case STATES.IDLE:
-          await handleMainMenuCallback(chatId, userId, data);
+          await handleMainMenuCallback(chatId, userId, data, messageId);
+          break;
+        case STATES.SELECTING_MODULES:
+          await handleModuleCallback(chatId, userId, data, userState);
           break;
         default:
           showMainMenu(chatId, "Please use the menu to navigate:");
@@ -324,29 +330,30 @@ export const bot = new TelegramBot(token, { polling: true });
   const handleMainMenuCallback = async (
     chatId: number,
     userId: string,
-    data: string | undefined
+    data: string | undefined,
+    messageId: number
   ) => {
     switch (data) {
       case "add_account":
-        await startAddAccount(chatId, userId);
+        await startAddAccount(chatId, userId, messageId);
         break;
       case "view_accounts":
-        await viewAccounts(chatId, userId);
+        await viewAccounts(chatId, userId, messageId);
         break;
       case "remove_account":
-        await startRemoveAccount(chatId, userId);
+        await startRemoveAccount(chatId, userId, messageId);
         break;
       case "toggle_account":
-        await startToggleAccount(chatId, userId);
+        await startToggleAccount(chatId, userId, messageId);
         break;
       case "schedule_scraping":
-        await startScheduleScraping(chatId, userId);
+        await startScheduleScraping(chatId, userId, messageId);
         break;
       case "view_schedules":
-        await viewSchedules(chatId, userId);
+        await viewSchedules(chatId, userId, messageId);
         break;
       case "remove_schedule":
-        await startRemoveSchedule(chatId, userId);
+        await startRemoveSchedule(chatId, userId, messageId);
         break;
       default:
         showMainMenu(chatId);
@@ -354,8 +361,22 @@ export const bot = new TelegramBot(token, { polling: true });
   };
 
   // Add account functions
-  const startAddAccount = async (chatId: number, userId: string) => {
+  const startAddAccount = async (
+    chatId: number,
+    userId: string,
+    messageId: number
+  ) => {
     setUserState(userId, STATES.ADDING_ACCOUNT);
+
+    if (messageId) {
+      await bot.editMessageReplyMarkup(
+        { inline_keyboard: [] },
+        {
+          chat_id: chatId,
+          message_id: messageId,
+        }
+      );
+    }
 
     const cancelOptions = {
       reply_markup: {
@@ -390,15 +411,15 @@ export const bot = new TelegramBot(token, { polling: true });
 
     const [firstName, lastName, email, password] = fields.map((field) =>
       field.trim()
-  );
-  
-  if (!firstName || !lastName || !password) {
-    await bot.sendMessage(
-      chatId,
-      "All fields are required. Please provide: first_name:last_name:email:password"
     );
-    return;
-  }
+
+    if (!firstName || !lastName || !password) {
+      await bot.sendMessage(
+        chatId,
+        "All fields are required. Please provide: first_name:last_name:email:password"
+      );
+      return;
+    }
     if (!isValidEmail(email)) {
       await bot.sendMessage(
         chatId,
@@ -406,7 +427,6 @@ export const bot = new TelegramBot(token, { polling: true });
       );
       return;
     }
-
 
     try {
       const existingAccount = await Account.findOne({ email });
@@ -514,6 +534,148 @@ export const bot = new TelegramBot(token, { polling: true });
       return;
     }
 
+    // Move to module selection with all data
+    setUserState(userId, STATES.SELECTING_MODULES, {
+      ...userState,
+      personalDetails: {
+        day: dayNum,
+        month: monthNum,
+        year: yearNum,
+        street,
+        city,
+        postalCode,
+        houseNo,
+        countryCode,
+        phoneNumber,
+      },
+      modules: {
+        read: false,
+        hear: false,
+        write: false,
+        speak: false,
+      },
+    });
+
+    await showModuleSelection(chatId, userId);
+  };
+
+  const showModuleSelection = async (chatId: number, userId: string) => {
+    const userState = getUserState(userId);
+    const modules = userState.modules || {
+      read: false,
+      hear: false,
+      write: false,
+      speak: false,
+    };
+
+    const moduleButtons = [
+      [
+        {
+          text: `📖 Read ${modules.read ? "✅" : "❌"}`,
+          callback_data: "toggle_read",
+        },
+        {
+          text: `👂 Hear ${modules.hear ? "✅" : "❌"}`,
+          callback_data: "toggle_hear",
+        },
+      ],
+      [
+        {
+          text: `✏️ Write ${modules.write ? "✅" : "❌"}`,
+          callback_data: "toggle_write",
+        },
+        {
+          text: `🗣️ Speak ${modules.speak ? "✅" : "❌"}`,
+          callback_data: "toggle_speak",
+        },
+      ],
+      [
+        { text: "✅ Confirm Selection", callback_data: "confirm_modules" },
+        { text: "Cancel", callback_data: "cancel" },
+      ],
+    ];
+
+    const selectedCount = Object.values(modules).filter(Boolean).length;
+    const moduleStatus =
+      selectedCount > 0
+        ? `\n\n🎯 Selected modules: ${selectedCount}/4`
+        : "\n\n⚠️ No modules selected yet";
+
+    await bot.sendMessage(
+      chatId,
+      `🔧 **Module Selection**\n\nPlease select the modules you want to enable for this account:${moduleStatus}\n\n` +
+        `📖 **Read** - Enable reading capabilities\n` +
+        `👂 **Hear** - Enable hearing capabilities\n` +
+        `✏️ **Write** - Enable writing capabilities\n` +
+        `🗣️ **Speak** - Enable speaking capabilities\n\n` +
+        `Click the modules to toggle them on/off, then click "Confirm Selection" when ready.`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: moduleButtons,
+        },
+      }
+    );
+  };
+
+  const handleModuleCallback = async (
+    chatId: number,
+    userId: string,
+    data: string | undefined,
+    userState: any
+  ) => {
+    if (!data) return;
+
+    const modules = { ...userState.modules };
+
+    switch (data) {
+      case "toggle_read":
+        modules.read = !modules.read;
+        break;
+      case "toggle_hear":
+        modules.hear = !modules.hear;
+        break;
+      case "toggle_write":
+        modules.write = !modules.write;
+        break;
+      case "toggle_speak":
+        modules.speak = !modules.speak;
+        break;
+      case "confirm_modules":
+        await createAccountWithModules(chatId, userId, userState);
+        return;
+      default:
+        return;
+    }
+
+    // Update state with new module selection
+    setUserState(userId, STATES.SELECTING_MODULES, {
+      ...userState,
+      modules,
+    });
+
+    // Refresh the module selection display
+    await showModuleSelection(chatId, userId);
+  };
+
+  const handleModuleSelectionMessage = async (
+    chatId: number,
+    userId: string,
+    text: string | undefined,
+    userState: any
+  ) => {
+    // Ignore text messages in module selection state, user should use buttons
+    await bot.sendMessage(
+      chatId,
+      "Please use the buttons above to select modules, or click Cancel to return to the main menu."
+    );
+  };
+
+  const createAccountWithModules = async (
+    chatId: number,
+    userId: string,
+    userState: any
+  ) => {
     try {
       // Find or create user
       let user = await User.findOne({ telegramId: userId });
@@ -521,7 +683,9 @@ export const bot = new TelegramBot(token, { polling: true });
         user = await User.create({ telegramId: userId });
       }
 
-      // Create the account
+      const { personalDetails, modules } = userState;
+
+      // Create the account with modules
       const newAccount = await Account.create({
         user: user._id,
         email: userState.email,
@@ -529,34 +693,48 @@ export const bot = new TelegramBot(token, { polling: true });
         firstName: userState.firstName,
         lastName: userState.lastName,
         status: true,
+        modules: {
+          read: modules.read,
+          hear: modules.hear,
+          write: modules.write,
+          speak: modules.speak,
+        },
         details: {
           dob: {
-            day: dayNum,
-            month: monthNum,
-            year: yearNum,
+            day: personalDetails.day,
+            month: personalDetails.month,
+            year: personalDetails.year,
           },
           address: {
-            street,
-            city,
-            postalCode,
-            houseNo,
+            street: personalDetails.street,
+            city: personalDetails.city,
+            postalCode: personalDetails.postalCode,
+            houseNo: personalDetails.houseNo,
           },
           phone: {
-            countryCode,
-            number: phoneNumber,
+            countryCode: personalDetails.countryCode,
+            number: personalDetails.phoneNumber,
           },
         },
       });
 
       clearUserState(userId);
 
+      const enabledModules = Object.entries(modules)
+        .filter(([_, enabled]) => enabled)
+        .map(([module, _]) => module)
+        .join(", ");
+
+      const modulesList = enabledModules || "None";
+
       await bot.sendMessage(
         chatId,
         `✅ Successfully created account for ${userState.firstName} ${userState.lastName}!\n\n` +
           `📧 Email: ${userState.email}\n` +
-          `🎂 DOB: ${day}/${month}/${year}\n` +
-          `🏠 Address: ${houseNo} ${street}, ${city}, ${postalCode}\n` +
-          `📞 Phone: ${countryCode} ${phoneNumber}`
+          `🎂 DOB: ${personalDetails.day}/${personalDetails.month}/${personalDetails.year}\n` +
+          `🏠 Address: ${personalDetails.houseNo} ${personalDetails.street}, ${personalDetails.city}, ${personalDetails.postalCode}\n` +
+          `📞 Phone: ${personalDetails.countryCode} ${personalDetails.phoneNumber}\n` +
+          `🔧 Enabled Modules: ${modulesList}`
       );
 
       showMainMenu(chatId, "What would you like to do next?");
@@ -571,9 +749,22 @@ export const bot = new TelegramBot(token, { polling: true });
     }
   };
 
-  // View accounts function
-  const viewAccounts = async (chatId: number, userId: string) => {
+  // View accounts function (updated to show modules)
+  const viewAccounts = async (
+    chatId: number,
+    userId: string,
+    messageId: number
+  ) => {
     try {
+      if (messageId) {
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          {
+            chat_id: chatId,
+            message_id: messageId,
+          }
+        );
+      }
       await bot.sendMessage(
         chatId,
         "🔍 Getting your accounts from the database, please wait..."
@@ -597,6 +788,12 @@ export const bot = new TelegramBot(token, { polling: true });
             const address = account.details?.address;
             const phone = account.details?.phone;
 
+            const enabledModules =
+              Object.entries(account.modules || {})
+                .filter(([_, enabled]) => enabled)
+                .map(([module, _]) => module)
+                .join(", ") || "None";
+
             return (
               `${index + 1}. **ID:** \`${account._id}\`\n` +
               `   👤 **Name:** ${account.firstName} ${account.lastName}\n` +
@@ -609,7 +806,8 @@ export const bot = new TelegramBot(token, { polling: true });
               }, ${address?.city ?? ""}\n` +
               `   📞 **Phone:** ${phone?.countryCode ?? ""} ${
                 phone?.number ?? ""
-              }\n`
+              }\n` +
+              `   🔧 **Modules:** ${enabledModules}\n`
             );
           })
           .join("\n");
@@ -637,8 +835,22 @@ export const bot = new TelegramBot(token, { polling: true });
   };
 
   // Remove account functions
-  const startRemoveAccount = async (chatId: number, userId: string) => {
+  const startRemoveAccount = async (
+    chatId: number,
+    userId: string,
+    messageId: number
+  ) => {
     setUserState(userId, STATES.REMOVING_ACCOUNT);
+
+    if (messageId) {
+      await bot.editMessageReplyMarkup(
+        { inline_keyboard: [] },
+        {
+          chat_id: chatId,
+          message_id: messageId,
+        }
+      );
+    }
 
     const cancelOptions = {
       reply_markup: {
@@ -712,8 +924,22 @@ export const bot = new TelegramBot(token, { polling: true });
     }
   };
 
-  const startToggleAccount = async (chatId: number, userId: string) => {
+  const startToggleAccount = async (
+    chatId: number,
+    userId: string,
+    messageId: number
+  ) => {
     setUserState(userId, STATES.TOGGLING_ACCOUNT);
+
+    if (messageId) {
+      await bot.editMessageReplyMarkup(
+        { inline_keyboard: [] },
+        {
+          chat_id: chatId,
+          message_id: messageId,
+        }
+      );
+    }
 
     const cancelOptions = {
       reply_markup: {
@@ -792,8 +1018,22 @@ export const bot = new TelegramBot(token, { polling: true });
 
   // FIXED SCHEDULING FUNCTIONS
 
-  const startScheduleScraping = async (chatId: number, userId: string) => {
+  const startScheduleScraping = async (
+    chatId: number,
+    userId: string,
+    messageId: number
+  ) => {
     setUserState(userId, STATES.SETTING_SCHEDULE);
+
+    if (messageId) {
+      await bot.editMessageReplyMarkup(
+        { inline_keyboard: [] },
+        {
+          chat_id: chatId,
+          message_id: messageId,
+        }
+      );
+    }
 
     const cancelOptions = {
       reply_markup: {
@@ -918,8 +1158,21 @@ export const bot = new TelegramBot(token, { polling: true });
     }
   };
 
-  const viewSchedules = async (chatId: number, userId: string) => {
+  const viewSchedules = async (
+    chatId: number,
+    userId: string,
+    messageId: number
+  ) => {
     try {
+      if (messageId) {
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          {
+            chat_id: chatId,
+            message_id: messageId,
+          }
+        );
+      }
       await bot.sendMessage(chatId, "🔍 Fetching your schedules...");
 
       const user = await User.findOne({ telegramId: userId });
@@ -973,8 +1226,21 @@ export const bot = new TelegramBot(token, { polling: true });
     }
   };
 
-  const startRemoveSchedule = async (chatId: number, userId: string) => {
+  const startRemoveSchedule = async (
+    chatId: number,
+    userId: string,
+    messageId: number
+  ) => {
     try {
+      if (messageId) {
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          {
+            chat_id: chatId,
+            message_id: messageId,
+          }
+        );
+      }
       const user = await User.findOne({ telegramId: userId });
       if (!user) {
         await bot.sendMessage(

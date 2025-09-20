@@ -1,5 +1,38 @@
-import mongoose from "mongoose";
-const accountSchema = new mongoose.Schema(
+import mongoose, { Types } from "mongoose";
+import { UserDocument } from "./userSchema";
+
+export interface AccountDocument extends Document {
+  user: Types.ObjectId | UserDocument;
+  email: string;
+  firstName: string;
+  lastName: string;
+  status: boolean;
+  password: string;
+  modules: {
+    read: boolean;
+    hear: boolean;
+    write: boolean;
+    speak: boolean;
+  };
+  details: {
+    dob: {
+      day: number;
+      month: number;
+      year: number;
+    };
+    address: {
+      street: string;
+      city: string;
+      postalCode: string;
+      houseNo: string;
+    };
+    phone: {
+      countryCode: string;
+      number: string;
+    };
+  };
+}
+const accountSchema = new mongoose.Schema<AccountDocument>(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -26,6 +59,12 @@ const accountSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    modules: {
+      read: { type: Boolean, default: false },
+      hear: { type: Boolean, default: false },
+      write: { type: Boolean, default: false },
+      speak: { type: Boolean, default: false },
+    },
     details: {
       dob: {
         day: { type: Number, required: true },
@@ -48,6 +87,6 @@ const accountSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-const Account = mongoose.model("Account", accountSchema);
+const Account = mongoose.model<AccountDocument>("Account", accountSchema);
 
 export default Account;

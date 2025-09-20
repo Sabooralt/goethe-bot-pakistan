@@ -7,6 +7,7 @@ export interface ISchedule {
   createdBy: mongoose.Types.ObjectId;
   lastRun?: Date;
   lastError?: string;
+  status: string;
 }
 
 const ScheduleSchema = new Schema<ISchedule>(
@@ -15,7 +16,12 @@ const ScheduleSchema = new Schema<ISchedule>(
     runAt: { type: Date, required: true },
     completed: { type: Boolean, default: false },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    lastRun: { type: Date,},
+    status: {
+      type: String,
+      enum: ["pending", "running", "success", "failed"],
+      default: "pending",
+    },
+    lastRun: { type: Date },
     lastError: { type: String },
   },
   { timestamps: true }
