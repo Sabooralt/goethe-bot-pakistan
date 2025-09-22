@@ -6,6 +6,7 @@ import User from "./models/userSchema";
 import Account from "./models/accountSchema";
 import { runAllAccounts, stopSchedule } from "./cluster/runCluster";
 import Schedule from "./models/scheduleSchema";
+import { examMonitor } from "./api/exam-api-finder";
 
 dotenv.config();
 
@@ -71,11 +72,11 @@ export const bot = new TelegramBot(token, { polling: true });
       });
 
       if (schedulerRunning) return;
-      /* schedulerRunning = true;
+      schedulerRunning = true;
 
       console.log("🚀 Starting scheduler...");
 
-      setInterval(async () => {
+      /* setInterval(async () => {
         try {
           const adjustedNow = new Date(Date.now() + 60 * 1000);
           const dueSchedules = await Schedule.find({
@@ -86,7 +87,10 @@ export const bot = new TelegramBot(token, { polling: true });
           for (const schedule of dueSchedules) {
             try {
               console.log(`⏰ Running schedule: ${schedule.name}`);
-              await runAllAccounts(schedule._id.toString());
+              const apiUrl = await getExamApiUrl();
+              if (!apiUrl) throw new Error("Could not capture API URL");
+
+              await pollExamApi(apiUrl, schedule.runAt);
 
               await Schedule.findByIdAndUpdate(schedule._id, {
                 completed: true,
@@ -105,7 +109,29 @@ export const bot = new TelegramBot(token, { polling: true });
         } catch (error) {
           console.error("Scheduler error:", error);
         }
-      }, 6000); */
+      }, 60000); */
+      try {
+        await examMonitor.startPolling(new Date("2025-10-13T13:00:00.000"), {
+          interval: 5000,
+          onExamFound: (exam) => {
+            console.log("📋 Exam detected:", {
+              modules: exam.modules?.length,
+              hasOid: !!exam.oid,
+            });
+          },
+          onExamWithOid: async (exam) => {
+            console.log("🎯 Processing exam with OID:", exam.oid);
+            if (exam.oid) {
+              await runAllAccounts(exam.oid);
+            } else {
+              console.log("❌ No OID found on exam, skipping runAllAccounts.");
+            }
+          },
+          stopOnFirstOid: true, // Stop after finding first exam with OID
+        });
+      } catch (err) {
+        console.log(err);
+      }
     } catch (err) {
       console.error("❌ Startup error:", err);
     }
