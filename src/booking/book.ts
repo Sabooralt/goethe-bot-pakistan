@@ -1,9 +1,12 @@
 import { Page } from "puppeteer";
 import dotenv from "dotenv";
-import { Account, Slot } from "../types";
-import detectBookingError from "../fillers/detectBookingError";
 import selectAllCheckboxes from "../fillers/selectAllCheckBoxes";
 import type TelegramBot from "node-telegram-bot-api";
+import { submitDetailsForm } from "../fillers/submitDetailsForm";
+import { submitAddressForm } from "../fillers/submitAddressForm";
+import { handleBookingConflict } from "../fillers/handleBookingConflict";
+import { AccountDocument } from "../models/accountSchema";
+import { UserDocument } from "../models/userSchema";
 
 dotenv.config();
 
@@ -12,7 +15,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const sendAccountLog = (
   bot: TelegramBot,
   chatId: string,
-  account: Account,
+  account: AccountDocument,
   message: string
 ) => {
   const accountInfo = `[${account.firstName} ${account.lastName} - ${account.email}]`;
@@ -28,13 +31,13 @@ const sendAccountLog = (
 
 const startBooking = async (
   page: Page,
-  acc: Account,
+  acc: AccountDocument,
   oid: string,
   bot: TelegramBot,
   maxRetries = 10
 ) => {
   let attempt = 0;
-  const chatId = acc.user.telegramId;
+  const chatId = (acc.user as UserDocument).telegramId;
 
   await page.evaluateOnNewDocument(() => {
     localStorage.setItem(
@@ -131,10 +134,9 @@ const startBooking = async (
     await page.type("#username", acc.email);
 
     await page.type("#password", acc.password);
-    console.log("✅ Filled out login form");
-    await sendAccountLog(bot, chatId, acc, "✅ Filled out login form");
+    console.log("✅ Submitted login form");
+    sendAccountLog(bot, chatId, acc, "✅ Submitted out login form");
 
-    // Submit the form
     await page.click('input[type="submit"][name="submit"]');
     console.log("🚀 Submitted login form");
 
@@ -142,128 +144,40 @@ const startBooking = async (
       waitUntil: "domcontentloaded",
     });
 
-    await page.waitForSelector('input[data-field-name="name"]', {
-      visible: true,
-    });
-    await page.type('input[data-field-name="name"]', acc.firstName);
-    await page.type('input[data-field-name="surname"]', acc.lastName);
-    console.log("✅ Filled out name and surname");
+    await handleBookingConflict(page);
 
-    const day = acc.details.dob.day;
-    await page.select(
-      'select[name="accountPanel:basicData:body:dateBirth:daySelector"]',
-      String(day - 1)
-    );
-    console.log("✅ Selected birth day");
+    await submitDetailsForm(page, acc);
 
-    const month = acc.details.dob.month;
-    const year = acc.details.dob.year;
-    const yearValue = year - 1925;
-    await page.evaluate((monthValue: number) => {
-      const monthSelect = document.querySelector(
-        'select[name="accountPanel:basicData:body:dateBirth:monthSelector"]'
-      ) as HTMLSelectElement;
-      if (monthSelect) {
-        monthSelect.value = String(monthValue); // January
-        monthSelect.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    }, month - 1);
-    console.log("✅ Selected birth month (first time)");
-
-    await page.evaluate((year) => {
-      const yearValue = document.querySelector(
-        'select[name="accountPanel:basicData:body:dateBirth:yearSelector"]'
-      ) as HTMLSelectElement;
-      if (yearValue) {
-        yearValue.value = String(year);
-        yearValue.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    }, yearValue);
-    console.log("✅ Selected birth year (first time)");
-
-    await delay(1000);
-
-    await page.evaluate((monthValue: number) => {
-      const monthSelect = document.querySelector(
-        'select[name="accountPanel:basicData:body:dateBirth:monthSelector"]'
-      ) as HTMLSelectElement;
-      if (monthSelect) {
-        monthSelect.value = String(monthValue);
-        monthSelect.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    }, month - 1);
-    console.log("✅ Selected birth month (second time)");
-
-    await delay(1000);
-    await page.evaluate((year) => {
-      const yearValue = document.querySelector(
-        'select[name="accountPanel:basicData:body:dateBirth:yearSelector"]'
-      ) as HTMLSelectElement;
-      if (yearValue) {
-        yearValue.value = String(year);
-        yearValue.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    }, yearValue);
-    console.log("✅ Selected birth year (second time)");
-
-    await page.click("button.cs-button--arrow_next");
-    console.log('✅ Clicked "weiter" after DOB');
-
-    await sendAccountLog(bot, chatId, acc, "✅ Filled out DOB form");
-
-    /*   await page.waitForNavigation({
-        waitUntil: "domcontentloaded",
-        }); */
-
-    await page.waitForSelector(
-      "input[name='accountPanel:furtherData:body:postalCode:inputContainer:input']"
-    );
-    console.log("✅ Address form loaded");
-
-    await page.type(
-      "input[name='accountPanel:furtherData:body:postalCode:inputContainer:input']",
-      acc.details.address.postalCode
-    );
-    await page.type(
-      "input[name='accountPanel:furtherData:body:city:inputContainer:input']",
-      acc.details.address.city
-    );
-    await page.type(
-      "input[name='accountPanel:furtherData:body:street:inputContainer:input']",
-      acc.details.address.street
-    );
-    await page.type(
-      "input[name='accountPanel:furtherData:body:houseNo:inputContainer:input']",
-      acc.details.address.houseNo
-    );
-    await page.type(
-      "input[name='accountPanel:furtherData:body:mobilePhone:input2Container:input2']",
-      acc.details.phone.number
-    );
-
-    const placeOfBirthInput = await page.$(
-      "input[name='accountPanel:furtherData:body:birthplace:inputContainer:input']"
-    );
-
-    if (placeOfBirthInput) {
-      await placeOfBirthInput.type(acc.details.address.city);
-    }
-
-    const motivationSelect = await page.$("select#id4d");
-
-    if (motivationSelect) {
-      await page.evaluate(() => {
-        const motivationValue = document.querySelector(
-          "select#id4d"
-        ) as HTMLSelectElement;
-        if (motivationValue) {
-          motivationValue.value = "BookingReasonOther";
-          motivationValue.dispatchEvent(new Event("change", { bubbles: true }));
-        }
+    try {
+      await page.waitForNavigation({
+        waitUntil: "networkidle2",
+        timeout: 5000,
       });
+      console.log("✅ Navigated after DOB form");
+    } catch {
+      console.log("ℹ️ No navigation after DOB form (skipped step?)");
     }
+
+    sendAccountLog(bot, chatId, acc, "✅ Filled out DOB form");
+
+    // ------------------------------
+
+    await submitAddressForm(page, acc);
+
+    try {
+      await page.waitForNavigation({
+        waitUntil: "networkidle2",
+        timeout: 5000,
+      });
+      console.log("✅ Navigated after address form");
+    } catch {
+      console.log(
+        "ℹ️ No navigation after address form (optional step skipped)"
+      );
+    }
+
     console.log("✅ Filled out contact details");
-    await sendAccountLog(bot, chatId, acc, "✅ Filled out contact details");
+    sendAccountLog(bot, chatId, acc, "✅ Filled out contact details");
 
     await page.click("button.cs-button--arrow_next");
     console.log('✅ Clicked "Next Button" after address');
@@ -273,22 +187,20 @@ const startBooking = async (
     });
 
     console.log("✅ Navigated to payment page");
-    await sendAccountLog(bot, chatId, acc, "✅ Navigate to the payment page");
 
-    await page.click("button.cs-button--arrow_next");
-
-    await page.waitForNavigation({
-      waitUntil: "domcontentloaded",
-    });
-
-    await sendAccountLog(
+    sendAccountLog(
       bot,
       chatId,
       acc,
-      "✅ Appointment booked successfully!"
+      "✅ Redirected to the payment page.\n" +
+        "💳 Please log in to the RDP, review all the details and complete the payment manually.\n" +
+        "⏳ You have approximately *10 minutes* to finish the payment before the session expires."
     );
 
-    return;
+    acc.status = false;
+    await acc.save();
+
+    await delay(600000);
   } catch (err) {
     console.error("Error in startBooking:", err);
   }

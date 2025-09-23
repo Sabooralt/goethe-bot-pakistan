@@ -1,4 +1,4 @@
-import mongoose, { Types } from "mongoose";
+import mongoose, { Document, Types } from "mongoose";
 import { UserDocument } from "./userSchema";
 
 export interface AccountDocument extends Document {

@@ -29,6 +29,7 @@ export interface Account {
   lastName: string;
   email: string;
   password: string;
+  
   details: {
     dob: {
       day: number;

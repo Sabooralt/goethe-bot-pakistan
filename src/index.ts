@@ -127,7 +127,7 @@ export const bot = new TelegramBot(token, { polling: true });
               console.log("❌ No OID found on exam, skipping runAllAccounts.");
             }
           },
-          stopOnFirstOid: true, // Stop after finding first exam with OID
+          stopOnFirstOid: true, 
         });
       } catch (err) {
         console.log(err);
