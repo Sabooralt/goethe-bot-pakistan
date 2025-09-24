@@ -1,12 +1,12 @@
 import { Page } from "puppeteer";
 import dotenv from "dotenv";
-import selectAllCheckboxes from "../fillers/selectAllCheckBoxes";
 import type TelegramBot from "node-telegram-bot-api";
 import { submitDetailsForm } from "../fillers/submitDetailsForm";
 import { submitAddressForm } from "../fillers/submitAddressForm";
 import { handleBookingConflict } from "../fillers/handleBookingConflict";
 import { AccountDocument } from "../models/accountSchema";
 import { UserDocument } from "../models/userSchema";
+import { selectAvailableModules } from "../fillers/selectAllModules";
 
 dotenv.config();
 
@@ -109,7 +109,20 @@ const startBooking = async (
 
   try {
     sendAccountLog(bot, chatId, acc, "🚀 Starting booking process...");
-    await selectAllCheckboxes(page);
+    const availableModules = await selectAvailableModules(page, acc.modules);
+
+    if (!availableModules) {
+      sendAccountLog(
+        bot,
+        chatId,
+        acc,
+        "❌ Required modules not available, stopping booking."
+      );
+      return;
+    }
+
+    sendAccountLog(bot, chatId, acc, "Selected modules, continuing booking...");
+
     await page.waitForSelector("button.cs-button--arrow_next", {
       visible: true,
     });
@@ -202,6 +215,12 @@ const startBooking = async (
 
     await delay(600000);
   } catch (err) {
+    sendAccountLog(
+      bot,
+      chatId,
+      acc,
+      `❌ Booking process failed: ${(err as Error).message}`
+    );
     console.error("Error in startBooking:", err);
   }
 };

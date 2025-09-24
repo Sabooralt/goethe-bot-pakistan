@@ -7,6 +7,7 @@ import Account from "./models/accountSchema";
 import { runAllAccounts, stopSchedule } from "./cluster/runCluster";
 import Schedule from "./models/scheduleSchema";
 import { examMonitor } from "./api/exam-api-finder";
+import { examScheduler } from "./schedulers/scheduler";
 
 dotenv.config();
 
@@ -33,9 +34,70 @@ let schedulerRunning = false;
 const app = express();
 app.use(express.json());
 
-// Health check endpoint
-app.get("/status/health", (req, res) => {
-  res.status(200).json({ status: "OK", timestamp: new Date().toISOString() });
+app.get("/status/scheduler", (req, res) => {
+  try {
+    const status = examScheduler.getStatus();
+    res.json({
+      success: true,
+      scheduler: status,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: String(error), // fallback
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+});
+
+// Optional: Emergency stop endpoint (useful for debugging)
+app.post("/admin/scheduler/stop", async (req, res) => {
+  try {
+    await examScheduler.stopAllMonitoring();
+    examScheduler.stop();
+    schedulerRunning = false;
+
+    res.json({
+      success: true,
+      message: "Scheduler stopped successfully",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: (error as any).message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// Optional: Manual trigger endpoint (useful for testing)
+app.post("/admin/scheduler/trigger/:scheduleId", async (req, res) => {
+  try {
+    const { scheduleId } = req.params;
+    await examScheduler.triggerSchedule(scheduleId);
+
+    res.json({
+      success: true,
+      message: `Schedule ${scheduleId} triggered successfully`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: (error as any).message,
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 const userStates = new Map();
@@ -59,11 +121,13 @@ export const bot = new TelegramBot(token, { polling: true });
 (async () => {
   async function start() {
     try {
+      // Connect to MongoDB
       await mongoose.connect(mongoUri, {
         serverSelectionTimeoutMS: 20000,
         socketTimeoutMS: 45000,
       });
 
+      // Start the web server
       app.listen(PORT, () => {
         console.log(`🚀 Server is running on http://localhost:${PORT}`);
         console.log(
@@ -71,69 +135,18 @@ export const bot = new TelegramBot(token, { polling: true });
         );
       });
 
-      if (schedulerRunning) return;
-      schedulerRunning = true;
-
-      console.log("🚀 Starting scheduler...");
-
-      /* setInterval(async () => {
-        try {
-          const adjustedNow = new Date(Date.now() + 60 * 1000);
-          const dueSchedules = await Schedule.find({
-            runAt: { $lte: adjustedNow },
-            completed: false,
-          });
-
-          for (const schedule of dueSchedules) {
-            try {
-              console.log(`⏰ Running schedule: ${schedule.name}`);
-              const apiUrl = await getExamApiUrl();
-              if (!apiUrl) throw new Error("Could not capture API URL");
-
-              await pollExamApi(apiUrl, schedule.runAt);
-
-              await Schedule.findByIdAndUpdate(schedule._id, {
-                completed: true,
-                lastRun: new Date(),
-              });
-            } catch (scheduleError) {
-              console.error(
-                `❌ Schedule ${schedule._id} failed:`,
-                scheduleError
-              );
-              await Schedule.findByIdAndUpdate(schedule._id, {
-                lastError: scheduleError || "Unknown error",
-              });
-            }
-          }
-        } catch (error) {
-          console.error("Scheduler error:", error);
-        }
-      }, 60000); */
-      try {
-        await examMonitor.startPolling(new Date("2025-10-13T13:00:00.000"), {
-          interval: 5000,
-          onExamFound: (exam) => {
-            console.log("📋 Exam detected:", {
-              modules: exam.modules?.length,
-              hasOid: !!exam.oid,
-            });
-          },
-          onExamWithOid: async (exam) => {
-            console.log("🎯 Processing exam with OID:", exam.oid);
-            if (exam.oid) {
-              await runAllAccounts(exam.oid);
-            } else {
-              console.log("❌ No OID found on exam, skipping runAllAccounts.");
-            }
-          },
-          stopOnFirstOid: true, 
-        });
-      } catch (err) {
-        console.log(err);
+      // Start the exam scheduler (only once)
+      if (schedulerRunning) {
+        console.log("⚠️ Scheduler already running, skipping startup");
+        return;
       }
+
+      schedulerRunning = true;
+      examScheduler.start();
     } catch (err) {
       console.error("❌ Startup error:", err);
+      schedulerRunning = false;
+      throw err;
     }
   }
 

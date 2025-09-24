@@ -26,8 +26,8 @@ class ExamApiMonitor {
    * Captures the exam API URL using Puppeteer with retry logic
    */
   async captureApiUrl(
-    maxRetries = 5,
-    retryDelay = 3000
+    maxRetries = 20,
+    retryDelay = 10000
   ): Promise<string | null> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       console.log(
@@ -131,6 +131,7 @@ class ExamApiMonitor {
       onExamFound?: (exam: ExamData) => void;
       onExamWithOid?: (exam: ExamData) => void;
       stopOnFirstOid?: boolean;
+      maxDurationMs?: number;
     } = {}
   ) {
     const {
@@ -138,6 +139,7 @@ class ExamApiMonitor {
       onExamFound,
       onExamWithOid,
       stopOnFirstOid = true,
+      maxDurationMs = 15 * 60 * 1000,
     } = options;
 
     // Ensure we have the API URL
@@ -167,6 +169,13 @@ class ExamApiMonitor {
     console.log(`🔗 Using API URL: ${this.apiUrl}`);
 
     this.isPolling = true;
+
+    const stopTimeout = setTimeout(() => {
+      console.log(
+        `⏳ Reached max duration of ${maxDurationMs / 60000} minutes`
+      );
+      this.stopPolling();
+    }, maxDurationMs);
 
     this.pollInterval = setInterval(async () => {
       try {
@@ -216,6 +225,7 @@ class ExamApiMonitor {
 
               if (stopOnFirstOid) {
                 console.log("🛑 Stopping polling (found exam with OID)");
+                clearTimeout(stopTimeout);
                 this.stopPolling();
                 return;
               }

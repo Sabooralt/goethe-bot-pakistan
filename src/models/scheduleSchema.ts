@@ -1,6 +1,6 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose, { Document, Schema } from "mongoose";
 
-export interface ISchedule {
+export interface ISchedule extends Document {
   name: string;
   runAt: Date;
   completed: boolean;
@@ -8,6 +8,7 @@ export interface ISchedule {
   lastRun?: Date;
   lastError?: string;
   status: string;
+  monitoringStarted: boolean;
 }
 
 const ScheduleSchema = new Schema<ISchedule>(
@@ -23,6 +24,7 @@ const ScheduleSchema = new Schema<ISchedule>(
     },
     lastRun: { type: Date },
     lastError: { type: String },
+    monitoringStarted: { type: Boolean },
   },
   { timestamps: true }
 );
