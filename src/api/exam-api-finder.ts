@@ -20,6 +20,7 @@ interface ApiResponse {
 class ExamApiMonitor {
   private apiUrl: string | null = null;
   private pollInterval: NodeJS.Timeout | null = null;
+  private timeoutInterval: NodeJS.Timeout | null = null;
   private isPolling = false;
 
   /**
@@ -69,8 +70,6 @@ class ExamApiMonitor {
             }
           });
 
-          // Set timeout for this attempt
-
           try {
             await page.goto(
               "https://www.goethe.de/ins/in/en/spr/prf/gzb2.cfm",
@@ -88,7 +87,6 @@ class ExamApiMonitor {
             }
           } catch (error) {
             console.error(`❌ Navigation error on attempt ${attempt}:`, error);
-
             resolve(null);
           }
         });
@@ -130,6 +128,7 @@ class ExamApiMonitor {
       interval?: number;
       onExamFound?: (exam: ExamData) => void;
       onExamWithOid?: (exam: ExamData) => void;
+      onTimeout?: () => void;
       stopOnFirstOid?: boolean;
       maxDurationMs?: number;
     } = {}
@@ -138,8 +137,9 @@ class ExamApiMonitor {
       interval = 5000,
       onExamFound,
       onExamWithOid,
+      onTimeout,
       stopOnFirstOid = true,
-      maxDurationMs = 15 * 60 * 1000,
+      maxDurationMs = 30 * 60 * 1000, // Default to 30 minutes
     } = options;
 
     // Ensure we have the API URL
@@ -166,14 +166,30 @@ class ExamApiMonitor {
         interval / 1000
       }s for exam on ${targetDateStr} at ${targetTimeStr}`
     );
+    console.log(
+      `⏰ Maximum polling duration: ${maxDurationMs / 60000} minutes`
+    );
     console.log(`🔗 Using API URL: ${this.apiUrl}`);
 
     this.isPolling = true;
 
-    const stopTimeout = setTimeout(() => {
+    // Set timeout to stop polling after maxDurationMs
+    this.timeoutInterval = setTimeout(async () => {
       console.log(
-        `⏳ Reached max duration of ${maxDurationMs / 60000} minutes`
+        `⏰ Reached max duration of ${
+          maxDurationMs / 60000
+        } minutes - no exam found`
       );
+
+      // Call the timeout callback if provided
+      if (onTimeout) {
+        try {
+          await onTimeout();
+        } catch (error) {
+          console.error("❌ Error in timeout callback:", error);
+        }
+      }
+
       this.stopPolling();
     }, maxDurationMs);
 
@@ -213,19 +229,26 @@ class ExamApiMonitor {
           for (const exam of matchingExams) {
             // Call the general exam found callback
             if (onExamFound) {
-              onExamFound(exam);
+              try {
+                await onExamFound(exam);
+              } catch (error) {
+                console.error("❌ Error in onExamFound callback:", error);
+              }
             }
 
             if (exam.oid) {
               console.log(`🎯 Exam with OID found: ${exam.oid}`);
 
               if (onExamWithOid) {
-                onExamWithOid(exam);
+                try {
+                  await onExamWithOid(exam);
+                } catch (error) {
+                  console.error("❌ Error in onExamWithOid callback:", error);
+                }
               }
 
               if (stopOnFirstOid) {
                 console.log("🛑 Stopping polling (found exam with OID)");
-                clearTimeout(stopTimeout);
                 this.stopPolling();
                 return;
               }
@@ -266,6 +289,14 @@ class ExamApiMonitor {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
+    }
+
+    if (this.timeoutInterval) {
+      clearTimeout(this.timeoutInterval);
+      this.timeoutInterval = null;
+    }
+
+    if (this.isPolling) {
       this.isPolling = false;
       console.log("🛑 Polling stopped");
     }
@@ -290,6 +321,21 @@ class ExamApiMonitor {
   }
 
   /**
+   * Get current polling status
+   */
+  getStatus(): {
+    isPolling: boolean;
+    hasApiUrl: boolean;
+    apiUrl: string | null;
+  } {
+    return {
+      isPolling: this.isPolling,
+      hasApiUrl: !!this.apiUrl,
+      apiUrl: this.apiUrl,
+    };
+  }
+
+  /**
    * Cleanup method
    */
   destroy() {
@@ -308,10 +354,14 @@ export async function pollExamApi(
 ) {
   await examMonitor.startPolling(runAt, {
     interval,
+    maxDurationMs: 30 * 60 * 1000, // 30 minutes
     onExamWithOid: (exam) => {
       console.log(`🎯 Ready to process exam with OID: ${exam.oid}`);
       // Add your cluster processing logic here
       // await runCluster(exam);
+    },
+    onTimeout: () => {
+      console.log("⏰ Polling timeout - no exam found within 30 minutes");
     },
   });
 }

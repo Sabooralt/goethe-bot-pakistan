@@ -9,6 +9,9 @@ export interface ISchedule extends Document {
   lastError?: string;
   status: string;
   monitoringStarted: boolean;
+  accountsProcessed?: number;
+  accountsSuccessful?: number;
+  accountsFailed?: number;
 }
 
 const ScheduleSchema = new Schema<ISchedule>(
@@ -25,6 +28,9 @@ const ScheduleSchema = new Schema<ISchedule>(
     lastRun: { type: Date },
     lastError: { type: String },
     monitoringStarted: { type: Boolean },
+    accountsProcessed: { type: Number },
+    accountsSuccessful: { type: Number },
+    accountsFailed: { type: Number },
   },
   { timestamps: true }
 );

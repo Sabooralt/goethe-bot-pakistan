@@ -788,6 +788,10 @@ export const bot = new TelegramBot(token, { polling: true });
     }
   };
 
+  function escapeMarkdownV2(text: string): string {
+    return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+  }
+
   // View accounts function (updated to show modules)
   const viewAccounts = async (
     chatId: number,
@@ -830,7 +834,7 @@ export const bot = new TelegramBot(token, { polling: true });
             const enabledModules =
               Object.entries(account.modules || {})
                 .filter(([_, enabled]) => enabled)
-                .map(([module, _]) => module)
+                .map(([module, _]) => escapeMarkdownV2(module)) // ✅ escape here
                 .join(", ") || "None";
 
             return (
@@ -1238,11 +1242,20 @@ export const bot = new TelegramBot(token, { polling: true });
       const scheduleList = schedules
         .map((schedule, index) => {
           const runTime = schedule.runAt.toLocaleString();
+          const lastRun = schedule.lastRun
+            ? schedule.lastRun.toLocaleString()
+            : "Never";
+          const lastError = schedule.lastError ? schedule.lastError : "None";
           return (
             `${index + 1}. **${schedule.name}**\n` +
             `   ⏰ **Runs at:** ${runTime}\n` +
             `   🆔 **ID:** \`${schedule._id}\`\n` +
-            `   📝 **Status:** ${schedule.completed ? "Completed" : "Pending"}`
+            `   📝 **Status:** ${
+              schedule.completed ? "Completed" : "Pending"
+            }\n` +
+            `   🔄 *Last Run:* ${lastRun}\n` +
+            `   ⚠️ *Last Error:* ${lastError}\n` +
+            `   📡 *Monitoring:* ${schedule.monitoringStarted ? "Yes" : "No"}`
           );
         })
         .join("\n\n");
