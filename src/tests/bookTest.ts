@@ -54,7 +54,10 @@ const selectAvailableModules = async (page: Page, modules: AccountModules) => {
 };
 
 const run = async () => {
-  const browser = await puppeteer.launch({ headless: false });
+  const browser = await puppeteer.launch({
+    headless: false,
+    env: { DISPLAY: ":99" },
+  });
   const page = await browser.newPage();
 
   const url =

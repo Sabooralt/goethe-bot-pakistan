@@ -10,6 +10,13 @@ import { selectAvailableModules } from "../fillers/selectAllModules";
 
 dotenv.config();
 
+interface DisplayInfo {
+  display: string;
+  displayNumber: string;
+  noVncUrl: string;
+  vncPort: number;
+}
+
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const sendAccountLog = (
@@ -22,7 +29,7 @@ const sendAccountLog = (
   const fullMessage = `${accountInfo} ${message}`;
 
   try {
-    bot.sendMessage(chatId, fullMessage);
+    bot.sendMessage(chatId, fullMessage, { parse_mode: "Markdown" });
     console.log(fullMessage);
   } catch (error) {
     console.error("Failed to send Telegram message:", error);
@@ -34,6 +41,7 @@ const startBooking = async (
   acc: AccountDocument,
   oid: string,
   bot: TelegramBot,
+  displayInfo?: DisplayInfo,
   maxRetries = 10
 ) => {
   let attempt = 0;
@@ -64,6 +72,7 @@ const startBooking = async (
       })
     );
   });
+
   await page.setRequestInterception(true);
   page.on("request", (req) => {
     const resourceType = req.resourceType();
@@ -109,6 +118,19 @@ const startBooking = async (
 
   try {
     sendAccountLog(bot, chatId, acc, "🚀 Starting booking process...");
+
+    // Add display info to initial notification if available
+    if (displayInfo) {
+      sendAccountLog(
+        bot,
+        chatId,
+        acc,
+        `🖥️ Browser running on display ${displayInfo.display}\n` +
+          `🔗 noVNC Access: ${displayInfo.noVncUrl}\n` +
+          `🔌 VNC Port: ${displayInfo.vncPort}`
+      );
+    }
+
     const availableModules = await selectAvailableModules(page, acc.modules);
 
     if (!availableModules) {
@@ -201,25 +223,56 @@ const startBooking = async (
 
     console.log("✅ Navigated to payment page");
 
+    // Enhanced notification with display access information
+    let paymentMessage =
+      "✅ Redirected to the payment page.\n" +
+      "💳 Please review all the details and complete the payment manually.\n" +
+      "⏳ You have approximately *10 minutes* to finish the payment before the session expires.\n\n";
+
+    if (displayInfo) {
+      paymentMessage +=
+        "🖥️ **Manual Access Available:**\n" +
+        `🔗 **noVNC URL:** ${displayInfo.noVncUrl}\n` +
+        `🖥️ **Display:** ${displayInfo.display}\n` +
+        `🔌 **VNC Port:** ${displayInfo.vncPort}\n\n` +
+        "💡 **Instructions:**\n" +
+        "• Click the noVNC URL to access the browser remotely\n" +
+        "• Complete the payment process manually\n" +
+        "• The browser will remain open for manual interaction\n" +
+        "• Session will timeout in approximately 10 minutes";
+    } else {
+      paymentMessage +=
+        "🖥️ Please log in to the RDP to access the browser and complete payment.";
+    }
+
+    sendAccountLog(bot, chatId, acc, paymentMessage);
+
+    // Keep account active for manual payment completion
+    // Don't set acc.status = false here since user needs to complete payment manually
+
+    // Wait for 10 minutes to allow manual payment completion
+    await delay(600000);
+
+    // After timeout, disable account (payment should be completed by now)
+    acc.status = false;
+    await acc.save();
+
     sendAccountLog(
       bot,
       chatId,
       acc,
-      "✅ Redirected to the payment page.\n" +
-        "💳 Please log in to the RDP, review all the details and complete the payment manually.\n" +
-        "⏳ You have approximately *10 minutes* to finish the payment before the session expires."
+      "⏰ Session timeout reached. Account has been disabled.\n" +
+        "✅ If payment was completed successfully, the booking should be confirmed."
     );
-
-    acc.status = false;
-    await acc.save();
-
-    await delay(600000);
   } catch (err) {
     sendAccountLog(
       bot,
       chatId,
       acc,
-      `❌ Booking process failed: ${(err as Error).message}`
+      `❌ Booking process failed: ${(err as Error).message}` +
+        (displayInfo
+          ? `\n🖥️ You can still access the browser at: ${displayInfo.noVncUrl}`
+          : "")
     );
     console.error("Error in startBooking:", err);
   }
