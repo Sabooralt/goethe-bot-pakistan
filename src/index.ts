@@ -4,10 +4,9 @@ import express from "express";
 import TelegramBot from "node-telegram-bot-api";
 import User from "./models/userSchema";
 import Account from "./models/accountSchema";
-import { runAllAccounts, stopSchedule } from "./cluster/runCluster";
 import Schedule from "./models/scheduleSchema";
-import { examMonitor } from "./api/exam-api-finder";
 import { examScheduler } from "./schedulers/scheduler";
+import { DateTime } from "luxon";
 
 dotenv.config();
 
@@ -1086,11 +1085,11 @@ export const bot = new TelegramBot(token, { polling: true });
 
     await bot.sendMessage(
       chatId,
-      "⏰ Please enter the schedule details in this format:\n\n" +
+      "⏰ Please enter the schedule details in **UTC time** using this format:\n\n" +
         "YYYY-MM-DD HH:MM ScheduleName\n\n" +
         "Example:\n" +
-        "2024-12-25 09:30 Christmas Booking\n" +
-        "2025-01-15 14:00 January Session\n\n" +
+        "2024-12-25 09:30 Christmas Booking (UTC)\n" +
+        "2025-01-15 14:00 January Session (UTC)\n\n" +
         "Or click Cancel to return to the main menu.",
       cancelOptions
     );
@@ -1131,7 +1130,7 @@ export const bot = new TelegramBot(token, { polling: true });
     }
 
     // Validate time format
-    const timeRegex = /^\d{2}:\d{2}$/;
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
     if (!timeRegex.test(timePart)) {
       await bot.sendMessage(
         chatId,
@@ -1140,18 +1139,21 @@ export const bot = new TelegramBot(token, { polling: true });
       return;
     }
 
-    const datetimeStr = `${datePart}T${timePart}:00`;
-    const runAt = new Date(datetimeStr);
+    // Combine date and time into UTC DateTime
+    const datetimeStr = `${datePart}T${timePart}:00Z`; // Z = UTC
+    const runAt = DateTime.fromISO(datetimeStr, { zone: "utc" });
 
-    if (isNaN(runAt.getTime())) {
+    if (!runAt.isValid) {
       await bot.sendMessage(
         chatId,
-        "❌ Invalid date/time. Please check your input and try again."
+        `❌ Invalid date/time: ${
+          runAt.invalidExplanation || "Please check your input"
+        }`
       );
       return;
     }
 
-    if (runAt <= new Date()) {
+    if (runAt.toJSDate() <= new Date()) {
       await bot.sendMessage(
         chatId,
         "❌ Schedule time must be in the future. Please choose a later date/time."
@@ -1173,18 +1175,21 @@ export const bot = new TelegramBot(token, { polling: true });
 
       const newSchedule = await Schedule.create({
         name: scheduleName,
-        runAt,
+        runAt: runAt.toJSDate(), // store as UTC
         createdBy: user._id,
         completed: false,
       });
 
       clearUserState(userId);
 
+      // Confirm in UTC
+      const displayTime = runAt.toUTC().toFormat("yyyy-MM-dd HH:mm 'UTC'");
+
       await bot.sendMessage(
         chatId,
         `✅ Schedule created successfully!\n\n` +
           `📝 Name: ${scheduleName}\n` +
-          `⏰ Scheduled for: ${runAt.toLocaleString()}\n` +
+          `⏰ Scheduled for: ${displayTime}\n` +
           `🆔 ID: ${newSchedule._id}\n\n` +
           `All active accounts will run automatically at this time.`
       );
@@ -1443,6 +1448,10 @@ export const bot = new TelegramBot(token, { polling: true });
   bot.on("polling_error", (error) => {
     console.log(`Polling error: ${error.name}: ${error.message}`);
   });
+
+  setInterval(()=>{
+
+  },100000)
 
   process.on("SIGINT", () => {
     console.log("Shutting down await bot...");

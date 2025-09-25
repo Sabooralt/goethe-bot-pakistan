@@ -3,6 +3,7 @@ import { examMonitor } from "../api/exam-api-finder";
 import { runAllAccounts } from "../cluster/runCluster";
 import Schedule, { ISchedule } from "../models/scheduleSchema";
 import User from "../models/userSchema";
+import { DateTime } from "luxon";
 
 interface ActiveSession {
   scheduleId: string;
@@ -70,14 +71,17 @@ class ExamScheduler {
    */
   private async checkAndStartMonitoring(): Promise<void> {
     try {
-      const now = new Date();
-      const monitoringStartTime = new Date(now.getTime() + 2 * 60 * 1000); // 2 minutes from now
+      const nowUtc = DateTime.utc().toJSDate();
 
+      // Monitoring starts 2 minutes from now (UTC)
+      const monitoringStartTimeUtc = DateTime.utc()
+        .plus({ minutes: 2 })
+        .toJSDate();
       // Find schedules that need monitoring to start (2 minutes before exam time)
       const schedulesToMonitor = await Schedule.find({
         runAt: {
-          $gte: now, // Exam time is in the future
-          $lte: monitoringStartTime, // But monitoring should start within 2 minutes
+          $gte: nowUtc, // Exam time is in the future
+          $lte: monitoringStartTimeUtc, // But monitoring should start within 2 minutes
         },
         completed: false,
         status: { $ne: "running" }, // Not already running

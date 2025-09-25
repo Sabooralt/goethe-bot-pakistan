@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
     },
     username: String,
   },
+
   {
     timestamps: true,
   }

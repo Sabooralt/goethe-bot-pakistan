@@ -9,6 +9,11 @@ interface ExamModule {
 interface ExamData {
   oid?: string;
   modules?: ExamModule[];
+  bookFromStamp?: string; // ISO timestamp when booking opens
+  bookToStamp?: string; // ISO timestamp when booking closes
+  bookFrom?: string; // Human readable booking start date
+  bookTo?: string; // Human readable booking end date
+  eventName?: string; // Exam name for logging
   [key: string]: any;
 }
 
@@ -164,7 +169,7 @@ class ExamApiMonitor {
     console.log(
       `📡 Starting to poll API every ${
         interval / 1000
-      }s for exam on ${targetDateStr} at ${targetTimeStr}`
+      }s for exams with booking opening at ${targetDateStr} at ${targetTimeStr}`
     );
     console.log(
       `⏰ Maximum polling duration: ${maxDurationMs / 60000} minutes`
@@ -210,21 +215,52 @@ class ExamApiMonitor {
           return;
         }
 
-        // Find matching exams
-        const matchingExams = data.DATA.filter((exam: ExamData) =>
-          exam.modules?.some((module: ExamModule) => {
-            const moduleDate = module.date === targetDateStr;
-            const moduleTime = module.startTime.startsWith(
-              targetTimeStr.substring(0, 5)
-            ); // Match HH:MM
-            return moduleDate && moduleTime;
-          })
-        );
+        // Find matching exams by checking when booking opens (bookFromStamp)
+        // The scheduler runAt should match the booking availability time, not exam date
+        const matchingExams = data.DATA.filter((exam: ExamData) => {
+          if (!exam.bookFromStamp) {
+            return false; // Skip exams without booking timestamp
+          }
+
+          // Parse the booking start time
+          const bookFromDate = new Date(exam.bookFromStamp);
+          const bookFromDateStr = bookFromDate.toISOString().split("T")[0];
+          const bookFromTimeStr = bookFromDate.toTimeString().split(" ")[0];
+
+          // Match based on when booking opens, not exam date
+          const dateMatches = bookFromDateStr === targetDateStr;
+          const timeMatches = bookFromTimeStr.startsWith(
+            targetTimeStr.substring(0, 5)
+          );
+
+          return dateMatches && timeMatches;
+        });
 
         if (matchingExams.length > 0) {
+          const exam = matchingExams[0]; // Focus on first matching exam for logging
+          const examName = exam.eventName || "Unknown Exam";
+          const bookFromDate = new Date(exam.bookFromStamp!);
+
           console.log(
-            `✅ Found ${matchingExams.length} matching exam(s) on ${targetDateStr} at ${targetTimeStr}`
+            `✅ Found ${matchingExams.length} matching exam(s): ${examName} with booking opening at ${targetDateStr} ${targetTimeStr}`
           );
+
+          // Log booking window and actual exam dates
+          if (exam.bookFromStamp && exam.bookToStamp) {
+            const bookFrom = new Date(exam.bookFromStamp);
+            const bookTo = new Date(exam.bookToStamp);
+            console.log(
+              `📅 Booking window: ${bookFrom.toLocaleString()} → ${bookTo.toLocaleString()}`
+            );
+          }
+
+          // Log actual exam dates from modules
+          if (exam.modules && exam.modules.length > 0) {
+            const examDates = exam.modules
+              .map((m) => `${m.date} ${m.startTime}`)
+              .join(", ");
+            console.log(`🎯 Actual exam sessions: ${examDates}`);
+          }
 
           for (const exam of matchingExams) {
             // Call the general exam found callback
@@ -237,7 +273,11 @@ class ExamApiMonitor {
             }
 
             if (exam.oid) {
-              console.log(`🎯 Exam with OID found: ${exam.oid}`);
+              console.log(
+                `🎯 Exam with OID found: ${exam.oid} (${
+                  exam.eventName || "Unknown"
+                })`
+              );
 
               if (onExamWithOid) {
                 try {
@@ -254,14 +294,16 @@ class ExamApiMonitor {
               }
             } else {
               console.log(
-                "⏳ Exam found but no OID yet, continuing to poll..."
+                `⏳ Exam found (${
+                  exam.eventName || "Unknown"
+                }) but no OID yet, continuing to poll...`
               );
             }
           }
         } else {
           const now = new Date().toLocaleTimeString();
           console.log(
-            `⌛ [${now}] No matching exams found, continuing to poll...`
+            `⌛ [${now}] No matching exams with booking opening at ${targetDateStr} ${targetTimeStr}, continuing to poll...`
           );
         }
       } catch (error: any) {
