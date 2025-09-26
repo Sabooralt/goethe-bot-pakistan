@@ -146,9 +146,9 @@ class ExamScheduler {
     await this.sendLogToUser(
       user.telegramId,
       `🚀 **Monitoring Started**\n` +
-        `📝 Schedule: ${schedule.name}\n` +
-        `📅 Exam time: ${schedule.runAt.toLocaleString()}\n` +
-        `🔄 Status: Starting to monitor for available slots...`
+      `📝 Schedule: ${schedule.name}\n` +
+      `📅 Exam time: ${schedule.runAt.toLocaleString()}\n` +
+      `🔄 Status: Starting to monitor for available slots...`
     );
 
     console.log(`🎯 Starting monitoring for schedule: ${schedule.name}`);
@@ -171,7 +171,7 @@ class ExamScheduler {
 
     try {
       // Start polling for this specific schedule
-      await examMonitor.startPolling(schedule.runAt, {
+      await examMonitor.startPolling(new Date("2025-09-11T07:30:00.000+00:00"), {
         interval: 5000, // Poll every 5 seconds
         maxDurationMs: 30 * 60 * 1000, // Poll for maximum 30 minutes
         onExamFound: async (exam) => {
@@ -185,11 +185,10 @@ class ExamScheduler {
           await this.sendLogToUser(
             user.telegramId,
             `📋 **Exam Found**\n` +
-              `📝 Schedule: ${schedule.name}\n` +
-              `✅ Exam slot detected with ${
-                exam.modules?.length || 0
-              } modules\n` +
-              `⏳ Waiting for booking to become available...`
+            `📝 Schedule: ${schedule.name}\n` +
+            `✅ Exam slot detected with ${exam.modules?.length || 0
+            } modules\n` +
+            `⏳ Waiting for booking to become available...`
           );
         },
         onExamWithOid: async (exam) => {
@@ -202,9 +201,9 @@ class ExamScheduler {
           await this.sendLogToUser(
             user.telegramId,
             `🎯 **Booking Available!**\n` +
-              `📝 Schedule: ${schedule.name}\n` +
-              `🆔 OID: ${exam.oid}\n` +
-              `🤖 Starting automated booking process...`
+            `📝 Schedule: ${schedule.name}\n` +
+            `🆔 OID: ${exam.oid}\n` +
+            `🤖 Starting automated booking process...`
           );
 
           try {
@@ -245,9 +244,9 @@ class ExamScheduler {
           await this.sendLogToUser(
             user.telegramId,
             `⏰ **Schedule Timeout**\n` +
-              `📝 Schedule: ${schedule.name}\n` +
-              `❌ No exam slots found within 30 minutes\n` +
-              `💡 The exam might not be available yet. You can create a new schedule to try again later.`
+            `📝 Schedule: ${schedule.name}\n` +
+            `❌ No exam slots found within 30 minutes\n` +
+            `💡 The exam might not be available yet. You can create a new schedule to try again later.`
           );
 
           // Update schedule status
@@ -307,10 +306,10 @@ class ExamScheduler {
         await this.sendLogToUser(
           user.telegramId,
           `❌ **Schedule Error**\n` +
-            `📝 Schedule: ${schedule.name}\n` +
-            `🚨 Error: ${context}\n` +
-            `💬 Details: ${errorMessage}\n` +
-            `⏰ Time: ${new Date().toLocaleString()}`
+          `📝 Schedule: ${schedule.name}\n` +
+          `🚨 Error: ${context}\n` +
+          `💬 Details: ${errorMessage}\n` +
+          `⏰ Time: ${new Date().toLocaleString()}`
         );
       }
     }
@@ -374,9 +373,9 @@ class ExamScheduler {
             await this.sendLogToUser(
               session.userId,
               `⏰ **Schedule Expired**\n` +
-                `📝 Schedule: ${schedule.name}\n` +
-                `❌ Monitoring stopped - exam time has passed\n` +
-                `💡 You can create a new schedule for future exams.`
+              `📝 Schedule: ${schedule.name}\n` +
+              `❌ Monitoring stopped - exam time has passed\n` +
+              `💡 You can create a new schedule for future exams.`
             );
           }
         }
@@ -446,9 +445,9 @@ class ExamScheduler {
           await this.sendLogToUser(
             session.userId,
             `🛑 **System Shutdown**\n` +
-              `📝 Schedule: ${schedule.name}\n` +
-              `⚠️ Monitoring stopped due to system shutdown\n` +
-              `💡 Your schedule will resume when the system restarts.`
+            `📝 Schedule: ${schedule.name}\n` +
+            `⚠️ Monitoring stopped due to system shutdown\n` +
+            `💡 Your schedule will resume when the system restarts.`
           );
         }
       }

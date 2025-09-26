@@ -1,5 +1,6 @@
 import puppeteer from "puppeteer";
 import axios from "axios";
+import { runAllAccounts } from "../cluster/runCluster";
 
 interface ExamModule {
   date: string;
@@ -9,11 +10,12 @@ interface ExamModule {
 interface ExamData {
   oid?: string;
   modules?: ExamModule[];
-  bookFromStamp?: string; // ISO timestamp when booking opens
-  bookToStamp?: string; // ISO timestamp when booking closes
-  bookFrom?: string; // Human readable booking start date
-  bookTo?: string; // Human readable booking end date
-  eventName?: string; // Exam name for logging
+  bookFromStamp?: string;
+  bookToStamp?: string;
+  bookFrom?: string;
+  bookTo?: string;
+  eventName?: string;
+  locationName?: string; // Added location name property
   [key: string]: any;
 }
 
@@ -22,11 +24,24 @@ interface ApiResponse {
   [key: string]: any;
 }
 
+interface PollingOptions {
+  interval?: number;
+  onExamFound?: (exam: ExamData) => void;
+  onExamWithOid?: (exam: ExamData) => Promise<void>;
+  onTimeout?: () => void;
+  stopOnFirstOid?: boolean;
+  maxDurationMs?: number;
+  priorityLocations?: string[];
+}
+
 class ExamApiMonitor {
   private apiUrl: string | null = null;
   private pollInterval: NodeJS.Timeout | null = null;
   private timeoutInterval: NodeJS.Timeout | null = null;
   private isPolling = false;
+  private shouldStopPolling = false;
+  private processingOid = false;
+  private processedOids = new Set<string>();
 
   /**
    * Captures the exam API URL using Puppeteer with retry logic
@@ -43,24 +58,35 @@ class ExamApiMonitor {
       let browser = null;
       try {
         browser = await puppeteer.launch({
-          headless: true, // Set to false for debugging
+          headless: true,
           args: [
             "--no-sandbox",
             "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
             "--disable-gpu",
+            "--disable-blink-features=AutomationControlled",
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           ],
         });
 
         const page = await browser.newPage();
 
-        // Set user agent to avoid detection
+        // Better user agent and viewport
         await page.setUserAgent(
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         );
+        await page.setViewport({ width: 1920, height: 1080 });
 
         const apiUrl = await new Promise<string | null>(async (resolve) => {
           let apiUrlCaptured = false;
+          const timeoutId = setTimeout(() => {
+            if (!apiUrlCaptured) {
+              console.log(
+                `⏱️ Timeout waiting for API URL on attempt ${attempt}`
+              );
+              resolve(null);
+            }
+          }, 20000);
 
           // Set up response interceptor
           page.on("response", async (response) => {
@@ -71,6 +97,7 @@ class ExamApiMonitor {
               console.log("✅ Captured API URL:", url);
               this.apiUrl = url;
               apiUrlCaptured = true;
+              clearTimeout(timeoutId);
               resolve(url);
             }
           });
@@ -84,14 +111,16 @@ class ExamApiMonitor {
               }
             );
 
-            // Wait a bit more to ensure all requests are captured
-            await new Promise((resolve) => setTimeout(resolve, 3000));
+            // Additional wait to ensure all requests are captured
+            await new Promise((resolve) => setTimeout(resolve, 5000));
 
             if (!apiUrlCaptured) {
+              clearTimeout(timeoutId);
               resolve(null);
             }
           } catch (error) {
             console.error(`❌ Navigation error on attempt ${attempt}:`, error);
+            clearTimeout(timeoutId);
             resolve(null);
           }
         });
@@ -108,12 +137,12 @@ class ExamApiMonitor {
           try {
             await browser.close();
           } catch (e) {
-            // Ignore close errors
+            console.error("Error closing browser:", e);
           }
         }
       }
 
-      // If not the last attempt, wait before retrying
+      // Wait before retrying
       if (attempt < maxRetries) {
         console.log(`⏳ Waiting ${retryDelay}ms before next attempt...`);
         await new Promise((resolve) => setTimeout(resolve, retryDelay));
@@ -125,27 +154,67 @@ class ExamApiMonitor {
   }
 
   /**
+   * Prioritize exams based on location preferences
+   */
+  private prioritizeExams(
+    exams: ExamData[],
+    priorityLocations: string[]
+  ): ExamData[] {
+    if (!priorityLocations || priorityLocations.length === 0) {
+      return exams;
+    }
+
+    // Sort exams by priority location
+    return exams.sort((a, b) => {
+      const aLocation = a.locationName?.toLowerCase() || "";
+      const bLocation = b.locationName?.toLowerCase() || "";
+
+      // Check priority for each exam
+      let aPriority = -1;
+      let bPriority = -1;
+
+      priorityLocations.forEach((location, index) => {
+        const lowerLocation = location.toLowerCase();
+        if (aLocation.includes(lowerLocation) && aPriority === -1) {
+          aPriority = index;
+        }
+        if (bLocation.includes(lowerLocation) && bPriority === -1) {
+          bPriority = index;
+        }
+      });
+
+      // If both have priority, sort by priority order
+      if (aPriority !== -1 && bPriority !== -1) {
+        return aPriority - bPriority;
+      }
+
+      // Priority locations come first
+      if (aPriority !== -1) return -1;
+      if (bPriority !== -1) return 1;
+
+      // No priority difference
+      return 0;
+    });
+  }
+
+  /**
    * Starts polling the API for exams at specified date/time
    */
-  async startPolling(
-    targetDate: Date,
-    options: {
-      interval?: number;
-      onExamFound?: (exam: ExamData) => void;
-      onExamWithOid?: (exam: ExamData) => void;
-      onTimeout?: () => void;
-      stopOnFirstOid?: boolean;
-      maxDurationMs?: number;
-    } = {}
-  ) {
+  async startPolling(targetDate: Date, options: PollingOptions = {}) {
     const {
       interval = 5000,
       onExamFound,
       onExamWithOid,
       onTimeout,
       stopOnFirstOid = true,
-      maxDurationMs = 30 * 60 * 1000, // Default to 30 minutes
+      maxDurationMs = 30 * 60 * 1000,
+      priorityLocations = ["chennai", "bengal", "bangalore"], // Default priority locations
     } = options;
+
+    // Reset flags
+    this.shouldStopPolling = false;
+    this.processingOid = false;
+    this.processedOids.clear();
 
     // Ensure we have the API URL
     if (!this.apiUrl) {
@@ -161,10 +230,12 @@ class ExamApiMonitor {
     if (this.isPolling) {
       console.log("⚠️ Already polling, stopping previous poll first");
       this.stopPolling();
+      // Wait for previous polling to fully stop
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     const targetDateStr = targetDate.toISOString().split("T")[0];
-    const targetTimeStr = targetDate.toTimeString().split(" ")[0]; // Gets HH:MM:SS
+    const targetTimeStr = targetDate.toTimeString().split(" ")[0];
 
     console.log(
       `📡 Starting to poll API every ${
@@ -174,6 +245,7 @@ class ExamApiMonitor {
     console.log(
       `⏰ Maximum polling duration: ${maxDurationMs / 60000} minutes`
     );
+    console.log(`📍 Priority locations: ${priorityLocations.join(", ")}`);
     console.log(`🔗 Using API URL: ${this.apiUrl}`);
 
     this.isPolling = true;
@@ -183,10 +255,11 @@ class ExamApiMonitor {
       console.log(
         `⏰ Reached max duration of ${
           maxDurationMs / 60000
-        } minutes - no exam found`
+        } minutes - stopping poll`
       );
 
-      // Call the timeout callback if provided
+      this.shouldStopPolling = true;
+
       if (onTimeout) {
         try {
           await onTimeout();
@@ -198,13 +271,32 @@ class ExamApiMonitor {
       this.stopPolling();
     }, maxDurationMs);
 
+    // Main polling loop
     this.pollInterval = setInterval(async () => {
+      // Check if we should stop polling
+      if (this.shouldStopPolling) {
+        console.log("🛑 Polling stop requested, clearing interval");
+        this.stopPolling();
+        return;
+      }
+
+      // Skip this iteration if we're processing an OID
+      if (this.processingOid) {
+        console.log(
+          "⏳ Still processing previous OID, skipping this poll iteration"
+        );
+        return;
+      }
+
       try {
         const response = await axios.get(this.apiUrl!, {
           timeout: 10000,
           headers: {
             "User-Agent":
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            Accept: "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
           },
         });
 
@@ -215,54 +307,70 @@ class ExamApiMonitor {
           return;
         }
 
-        // Find matching exams by checking when booking opens (bookFromStamp)
-        // The scheduler runAt should match the booking availability time, not exam date
-        const matchingExams = data.DATA.filter((exam: ExamData) => {
+        // Find matching exams by checking when booking opens
+        let matchingExams = data.DATA.filter((exam: ExamData) => {
           if (!exam.bookFromStamp) {
-            return false; // Skip exams without booking timestamp
+            return false;
           }
 
-          // Parse the booking start time
           const bookFromDate = new Date(exam.bookFromStamp);
           const bookFromDateStr = bookFromDate.toISOString().split("T")[0];
           const bookFromTimeStr = bookFromDate.toTimeString().split(" ")[0];
 
-          // Match based on when booking opens, not exam date
           const dateMatches = bookFromDateStr === targetDateStr;
-          const timeMatches = bookFromTimeStr.startsWith(
-            targetTimeStr.substring(0, 5)
-          );
+          const timeMatches =
+            bookFromTimeStr.substring(0, 5) === targetTimeStr.substring(0, 5);
 
           return dateMatches && timeMatches;
         });
 
         if (matchingExams.length > 0) {
-          const exam = matchingExams[0]; // Focus on first matching exam for logging
-          const examName = exam.eventName || "Unknown Exam";
-          const bookFromDate = new Date(exam.bookFromStamp!);
-
-          console.log(
-            `✅ Found ${matchingExams.length} matching exam(s): ${examName} with booking opening at ${targetDateStr} ${targetTimeStr}`
+          // Prioritize exams based on location
+          matchingExams = this.prioritizeExams(
+            matchingExams,
+            priorityLocations
           );
 
-          // Log booking window and actual exam dates
-          if (exam.bookFromStamp && exam.bookToStamp) {
-            const bookFrom = new Date(exam.bookFromStamp);
-            const bookTo = new Date(exam.bookToStamp);
+          const firstExam = matchingExams[0];
+          console.log(`✅ Found ${matchingExams.length} matching exam(s)`);
+
+          if (matchingExams.length > 1) {
+            console.log(`🎯 Multiple exams found. Processing by priority:`);
+            matchingExams.forEach((exam, index) => {
+              console.log(
+                `  ${index + 1}. ${exam.eventName || "Unknown"} at ${
+                  exam.locationName || "Unknown Location"
+                } ${
+                  exam.oid
+                    ? `(OID: ${exam.oid.substring(0, 8)}...)`
+                    : "(No OID yet)"
+                }`
+              );
+            });
+          }
+
+          // Log exam details
+          if (firstExam.bookFromStamp && firstExam.bookToStamp) {
+            const bookFrom = new Date(firstExam.bookFromStamp);
+            const bookTo = new Date(firstExam.bookToStamp);
             console.log(
               `📅 Booking window: ${bookFrom.toLocaleString()} → ${bookTo.toLocaleString()}`
             );
           }
 
-          // Log actual exam dates from modules
-          if (exam.modules && exam.modules.length > 0) {
-            const examDates = exam.modules
-              .map((m) => `${m.date} ${m.startTime}`)
-              .join(", ");
-            console.log(`🎯 Actual exam sessions: ${examDates}`);
-          }
-
+          // Process exams in priority order
           for (const exam of matchingExams) {
+            // Skip if already processed this OID
+            if (exam.oid && this.processedOids.has(exam.oid)) {
+              console.log(
+                `⏭️ Skipping already processed OID: ${exam.oid.substring(
+                  0,
+                  8
+                )}...`
+              );
+              continue;
+            }
+
             // Call the general exam found callback
             if (onExamFound) {
               try {
@@ -276,34 +384,59 @@ class ExamApiMonitor {
               console.log(
                 `🎯 Exam with OID found: ${exam.oid} (${
                   exam.eventName || "Unknown"
-                })`
+                }) at ${exam.locationName || "Unknown Location"}`
               );
+
+              // Mark as processed
+              this.processedOids.add(exam.oid);
 
               if (onExamWithOid) {
                 try {
+                  // Set processing flag BEFORE calling the callback
+                  this.processingOid = true;
+
+                  if (stopOnFirstOid) {
+                    // Mark for stopping BEFORE processing
+                    this.shouldStopPolling = true;
+                    console.log(
+                      "🛑 Marking polling for stop (found exam with OID)"
+                    );
+                  }
+
+                  // Process the exam
                   await onExamWithOid(exam);
+
+                  // Clear processing flag after completion
+                  this.processingOid = false;
+
+                  if (stopOnFirstOid) {
+                    // Stop polling after processing
+                    this.stopPolling();
+                    return;
+                  }
                 } catch (error) {
                   console.error("❌ Error in onExamWithOid callback:", error);
+                  this.processingOid = false;
                 }
               }
 
-              if (stopOnFirstOid) {
-                console.log("🛑 Stopping polling (found exam with OID)");
+              if (stopOnFirstOid && !onExamWithOid) {
+                this.shouldStopPolling = true;
                 this.stopPolling();
                 return;
               }
             } else {
               console.log(
-                `⏳ Exam found (${
-                  exam.eventName || "Unknown"
-                }) but no OID yet, continuing to poll...`
+                `⏳ Exam found (${exam.eventName || "Unknown"}) at ${
+                  exam.locationName || "Unknown Location"
+                } but no OID yet, continuing to poll...`
               );
             }
           }
         } else {
           const now = new Date().toLocaleTimeString();
           console.log(
-            `⌛ [${now}] No matching exams with booking opening at ${targetDateStr} ${targetTimeStr}, continuing to poll...`
+            `⌛ [${now}] No matching exams with booking opening at ${targetDateStr} ${targetTimeStr}`
           );
         }
       } catch (error: any) {
@@ -318,7 +451,11 @@ class ExamApiMonitor {
             "🔄 Network error detected, attempting to recapture API URL..."
           );
           this.apiUrl = null;
-          await this.captureApiUrl();
+          const newUrl = await this.captureApiUrl(3, 5000); // Fewer retries for network errors
+          if (!newUrl) {
+            console.error("❌ Failed to recapture API URL, stopping polling");
+            this.stopPolling();
+          }
         }
       }
     }, interval);
@@ -340,7 +477,26 @@ class ExamApiMonitor {
 
     if (this.isPolling) {
       this.isPolling = false;
+      this.shouldStopPolling = true;
       console.log("🛑 Polling stopped");
+    }
+  }
+
+  /**
+   * Force stops polling and waits for any processing to complete
+   */
+  async forceStopPolling(maxWaitMs = 10000): Promise<void> {
+    this.shouldStopPolling = true;
+    this.stopPolling();
+
+    const startTime = Date.now();
+    while (this.processingOid && Date.now() - startTime < maxWaitMs) {
+      console.log("⏳ Waiting for OID processing to complete...");
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    if (this.processingOid) {
+      console.warn("⚠️ Force stop timeout - processing may still be running");
     }
   }
 
@@ -369,38 +525,57 @@ class ExamApiMonitor {
     isPolling: boolean;
     hasApiUrl: boolean;
     apiUrl: string | null;
+    processingOid: boolean;
+    processedOids: string[];
   } {
     return {
       isPolling: this.isPolling,
       hasApiUrl: !!this.apiUrl,
       apiUrl: this.apiUrl,
+      processingOid: this.processingOid,
+      processedOids: Array.from(this.processedOids),
     };
   }
 
   /**
    * Cleanup method
    */
-  destroy() {
-    this.stopPolling();
+  async destroy() {
+    await this.forceStopPolling();
     this.apiUrl = null;
+    this.processedOids.clear();
   }
 }
 
-export { ExamApiMonitor };
+// Export singleton instance
 export const examMonitor = new ExamApiMonitor();
 
-// Legacy function for backward compatibility
+// Export class for testing or multiple instances
+export { ExamApiMonitor };
+
+// Updated legacy function with location priority
 export async function pollExamApi(
   runAt: Date = new Date("2025-09-21T09:00:00.000+00:00"),
-  interval = 5000
+  interval = 5000,
+  priorityLocations: string[] = ["chennai", "bengal", "bangalore"]
 ) {
   await examMonitor.startPolling(runAt, {
     interval,
-    maxDurationMs: 30 * 60 * 1000, // 30 minutes
-    onExamWithOid: (exam) => {
+    stopOnFirstOid: true,
+    maxDurationMs: 30 * 60 * 1000,
+    priorityLocations,
+    onExamWithOid: async (exam) => {
       console.log(`🎯 Ready to process exam with OID: ${exam.oid}`);
-      // Add your cluster processing logic here
-      // await runCluster(exam);
+      console.log(`📍 Location: ${exam.locationName || "Unknown"}`);
+
+      try {
+        // Call runAllAccounts and wait for it to complete
+        await runAllAccounts(exam.oid!);
+        console.log(`✅ Finished processing OID: ${exam.oid}`);
+      } catch (error) {
+        console.error(`❌ Error processing OID ${exam.oid}:`, error);
+        throw error; // Re-throw to be handled by the monitor
+      }
     },
     onTimeout: () => {
       console.log("⏰ Polling timeout - no exam found within 30 minutes");
