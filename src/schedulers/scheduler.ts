@@ -171,7 +171,7 @@ class ExamScheduler {
 
     try {
       // Start polling for this specific schedule
-      await examMonitor.startPolling(new Date("2025-09-11T07:30:00.000+00:00"), {
+      await examMonitor.startPolling(schedule.runAt, {
         interval: 5000, // Poll every 5 seconds
         maxDurationMs: 30 * 60 * 1000, // Poll for maximum 30 minutes
         onExamFound: async (exam) => {
