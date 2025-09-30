@@ -1,8 +1,6 @@
 import { Page } from "puppeteer";
 import dotenv from "dotenv";
 import type TelegramBot from "node-telegram-bot-api";
-import { submitDetailsForm } from "../fillers/submitDetailsForm";
-import { submitAddressForm } from "../fillers/submitAddressForm";
 import { handleBookingConflict } from "../fillers/handleBookingConflict";
 import { AccountDocument } from "../models/accountSchema";
 import { UserDocument } from "../models/userSchema";
@@ -25,7 +23,7 @@ const sendAccountLog = (
   account: AccountDocument,
   message: string
 ) => {
-  const accountInfo = `[${account.firstName} ${account.lastName} - ${account.email}]`;
+  const accountInfo = `[${account.email}]`;
   const fullMessage = `${accountInfo} ${message}`;
 
   try {
@@ -42,10 +40,10 @@ const startBooking = async (
   oid: string,
   bot: TelegramBot,
   displayInfo?: DisplayInfo,
-  maxRetries = 10
+  timeoutMs = 5 * 60 * 60 * 1000
 ) => {
-  let attempt = 0;
   const chatId = (acc.user as UserDocument).telegramId;
+  const startTime = Date.now();
 
   await page.evaluateOnNewDocument(() => {
     localStorage.setItem(
@@ -73,46 +71,42 @@ const startBooking = async (
     );
   });
 
-  await page.setRequestInterception(true);
-  page.on("request", (req) => {
-    const resourceType = req.resourceType();
-    if (
-      resourceType === "image" ||
-      resourceType === "font" ||
-      resourceType === "media" ||
-      resourceType === "other"
-    ) {
-      req.abort();
-    } else {
-      req.continue();
-    }
-  });
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    await page.goto(`https://www.goethe.de/coe?lang=en&oid=${oid}`, {
-      waitUntil: "domcontentloaded",
-    });
-    const pageTitle = await page.title();
-    if (pageTitle.includes("Error")) {
-      console.error(`❗ Booking error detected on attempt ${attempt}`);
+  while (true) {
+    const elapsed = Date.now() - startTime;
+    if (elapsed > timeoutMs) {
       sendAccountLog(
         bot,
         chatId,
         acc,
-        `❗ Booking error detected, retrying... (${attempt}/${maxRetries})`
+        "⏰ Booking retry timeout reached (5 hours). Stopping booking."
+      );
+      return;
+    }
+
+    await page.goto(`https://www.goethe.de/coe?lang=en&oid=${oid}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    const pageTitle = (await page.title()).toLowerCase();
+    if (
+      pageTitle.includes("error") ||
+      pageTitle.includes("unterbrechung") ||
+      /http\s?\d{3}/i.test(pageTitle)
+    ) {
+      console.error(`❗ Booking error detected, retrying... (elapsed ${Math.round(elapsed / 60000)} min)`);
+
+      sendAccountLog(
+        bot,
+        chatId,
+        acc,
+        `❗ Booking error detected, retrying...\nElapsed: ${Math.round(elapsed / 60000)} minutes`
       );
 
-      if (attempt === maxRetries) {
-        sendAccountLog(
-          bot,
-          chatId,
-          acc,
-          "❌ Max retries reached. Stopping booking."
-        );
-        return;
-      }
+      await delay(5000);
       continue;
     }
+
+    // Success – break retry loop
     break;
   }
 
@@ -126,8 +120,8 @@ const startBooking = async (
         chatId,
         acc,
         `🖥️ Browser running on display ${displayInfo.display}\n` +
-          `🔗 noVNC Access: ${displayInfo.noVncUrl}\n` +
-          `🔌 VNC Port: ${displayInfo.vncPort}`
+        `🔗 noVNC Access: ${displayInfo.noVncUrl}\n` +
+        `🔌 VNC Port: ${displayInfo.vncPort}`
       );
     }
 
@@ -169,19 +163,30 @@ const startBooking = async (
     await page.type("#username", acc.email);
 
     await page.type("#password", acc.password);
-    console.log("✅ Submitted login form");
-    sendAccountLog(bot, chatId, acc, "✅ Submitted out login form");
 
     await page.click('input[type="submit"][name="submit"]');
+    sendAccountLog(bot, chatId, acc, "✅ Submitted out login form");
     console.log("🚀 Submitted login form");
 
-    await page.waitForNavigation({
-      waitUntil: "domcontentloaded",
-    });
+    try {
+      await page.waitForNavigation({
+        waitUntil: "networkidle2",
+        timeout: 20000,
+      });
+    } catch (err) {
+      console.log(" ℹ️ Error logging in:" + (err as Error).message);
+      sendAccountLog(
+        bot,
+        chatId,
+        acc,
+        "❌ Error logging in, Please verify credentials."
+      );
+      return;
+    }
 
-    await handleBookingConflict(page);
+    const bookingConflict = await handleBookingConflict(page);
 
-    await submitDetailsForm(page, acc);
+    await page.click("button.cs-button--arrow_next");
 
     try {
       await page.waitForNavigation({
@@ -193,41 +198,24 @@ const startBooking = async (
       console.log("ℹ️ No navigation after DOB form (skipped step?)");
     }
 
-    sendAccountLog(bot, chatId, acc, "✅ Filled out DOB form");
+    await page.click("button.cs-button--arrow_next");
+    await page.waitForNavigation({
+      waitUntil: "networkidle2",
+    });
 
-    // ------------------------------
-
-    await submitAddressForm(page, acc);
-
-    try {
+    if (bookingConflict) {
+      await page.click("button.cs-button--arrow_next");
       await page.waitForNavigation({
         waitUntil: "networkidle2",
-        timeout: 5000,
       });
-      console.log("✅ Navigated after address form");
-    } catch {
-      console.log(
-        "ℹ️ No navigation after address form (optional step skipped)"
-      );
     }
-
-    console.log("✅ Filled out contact details");
-    sendAccountLog(bot, chatId, acc, "✅ Filled out contact details");
-
-    await page.click("button.cs-button--arrow_next");
-    console.log('✅ Clicked "Next Button" after address');
-
-    await page.waitForNavigation({
-      waitUntil: "domcontentloaded",
-    });
 
     console.log("✅ Navigated to payment page");
 
-    // Enhanced notification with display access information
     let paymentMessage =
       "✅ Redirected to the payment page.\n" +
       "💳 Please review all the details and complete the payment manually.\n" +
-      "⏳ You have approximately *10 minutes* to finish the payment before the session expires.\n\n";
+      "⏳ You have approximately *30 minutes* to finish the payment before the session expires.\n\n";
 
     if (displayInfo) {
       paymentMessage +=
@@ -239,7 +227,7 @@ const startBooking = async (
         "• Click the noVNC URL to access the browser remotely\n" +
         "• Complete the payment process manually\n" +
         "• The browser will remain open for manual interaction\n" +
-        "• Session will timeout in approximately 10 minutes";
+        "• Session will timeout in approximately 30 minutes";
     } else {
       paymentMessage +=
         "🖥️ Please log in to the RDP to access the browser and complete payment.";
@@ -250,8 +238,8 @@ const startBooking = async (
     // Keep account active for manual payment completion
     // Don't set acc.status = false here since user needs to complete payment manually
 
-    // Wait for 10 minutes to allow manual payment completion
-    await delay(600000);
+    // Wait for 30 minutes to allow manual payment completion
+    await delay(1800000);
 
     // After timeout, disable account (payment should be completed by now)
     acc.status = false;
@@ -262,7 +250,7 @@ const startBooking = async (
       chatId,
       acc,
       "⏰ Session timeout reached. Account has been disabled.\n" +
-        "✅ If payment was completed successfully, the booking should be confirmed."
+      "✅ If payment was completed successfully, the booking should be confirmed."
     );
   } catch (err) {
     sendAccountLog(
@@ -270,9 +258,9 @@ const startBooking = async (
       chatId,
       acc,
       `❌ Booking process failed: ${(err as Error).message}` +
-        (displayInfo
-          ? `\n🖥️ You can still access the browser at: ${displayInfo.noVncUrl}`
-          : "")
+      (displayInfo
+        ? `\n🖥️ You can still access the browser at: ${displayInfo.noVncUrl}`
+        : "")
     );
     console.error("Error in startBooking:", err);
   }

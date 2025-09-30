@@ -1,0 +1,292 @@
+[{
+            "endTime": "00:00:00.000",
+            "supportLanguages": [],
+            "eventName": "Goethe-Zertifikat B2",
+            "ageType": "",
+            "FILTERMESSAGEAPPEND": "",
+            "isExam": true,
+            "offerFlwKey": "",
+            "languagelevelDetailText": "On this date, we will be offering various classes for language level B2.",
+            "institutIdFlw": "",
+            "languagelevelText": "B2",
+            "bookToTime": "16:00:00.000",
+            "moduleId": "SM05004119",
+            "lastUpdated": "2025-09-29T08:59:40.000",
+            "ageTo": 99,
+            "teachingUnitsTotalText": "0 lessons",
+            "publishToStamp": "2025-10-15T18:29:59.000Z",
+            "startTime": "00:00:00.000",
+            "bookToStamp": "2025-09-30T10:30:00.000Z",
+            "ageSpan": "16 - 99",
+            "bookFrom": "17.09.2025",
+            "bookTo": "30.09.2025",
+            "eventTexts": [],
+            "estBillableMonth": 6,
+            "locationId": "F 05001304",
+            "airports": [],
+            "languageLevelArray": [
+                "B",
+                "2"
+            ],
+            "datesPerWeek": 0,
+            "startDateForAccessibility": "2025-10-15",
+            "eventTimeSpan": "15.10.2025",
+            "isOnlineCourse": false,
+            "offerKey": "O 10000356SM05004119      000000002025020          000",
+            "isDdpActive": false,
+            "isSingleBooking": true,
+            "bookFromStampLocalTimezone": "26",
+            "category": "E007",
+            "moduleLevelDesc": {
+                "COLUMNS": [
+                    "COURSELEVEL_ID",
+                    "CATEGORY_ID",
+                    "COURSELEVEL_MODULE_DESCRIPTION",
+                    "COURSELEVEL_TEST_DESCRIPTION_ONLINE",
+                    "COURSELEVEL_TEST_DESCRIPTION_OFFLINE"
+                ],
+                "DATA": [
+                    [
+                        6,
+                        "E007",
+                        null,
+                        null,
+                        25144565
+                    ]
+                ]
+            },
+            "smModuleIdFlw": "",
+            "smTexts": [
+                {
+                    "objectId": "SM05004119",
+                    "eventId": "00000000",
+                    "text": "Goethe-Zertifikat B2",
+                    "textKey": "SM05004119000000009005deO 10000356",
+                    "type": "9005",
+                    "lang": "de"
+                },
+                {
+                    "objectId": "SM05004119",
+                    "eventId": "00000000",
+                    "text": "<h2>Prüfungsstruktur</h2><div>Die Prüfung besteht aus vier Modulen:</div><div>Hören 40 Minuten</div><div>Lesen 65 Minuten</div><div>Schreiben 75 Minuten</div><div>Sprechen ca. 15 Minuten</div><div><br/></div><h2>Zugangsvoraussetzungen</h2><div>Empfohlen ab 16 Jahre</div><div><br/></div><h2>Mindestteilnehmerzahl</h2><div>Die Mindestteilnehmerzahl beträgt 10 Personen. Es kann natürlich auch bei uns vorkommen, dass die Mindestteilnehmerzahl nicht erreicht wird und eine Prüfung deshalb nicht zu Stande kommt. In diesem Fall werden wir versuchen, Ihnen frühzeitig eine Alternative anzubieten. Möchten Sie diese nicht akzeptieren, erhalten Sie die bereits geleisteten Zahlungen umgehend zurück.</div>",
+                    "textKey": "SM05004119000000009006deO 10000356",
+                    "type": "9006",
+                    "lang": "de"
+                },
+                {
+                    "objectId": "SM05004119",
+                    "eventId": "00000000",
+                    "text": "<h2>Parts of the exam</h2><div>The exam consists of four modules:</div><div>Listening 40 minutes</div><div>Reading 65 minutes</div><div>Writing 75 minutes</div><div>Speaking 15 minutes</div><div><br/></div><h2>Prerequisites for participation</h2><div>recommended from 16 years of age</div><div><br/></div><h2>Minimum number of participants</h2><div>The minimum number of participants is 10. If the minimum number of participants is not reached, the examination will not take place as a consequence. In such a case, we will do our best to offer you an alternative in good time. If you do not want to accept the suggested alternative, any payments already made will be promptly refunded.</div>",
+                    "textKey": "SM05004119000000009006enO 10000356",
+                    "type": "9006",
+                    "lang": "en"
+                }
+            ],
+            "checkForAccommodation": false,
+            "minModulePriceText": "INR 4,000.00",
+            "locationDescription": "<div>Goethe-Institut / Max Mueller Bhavan Mumbai</div><div>Chhatrapati Shivaji Maharaj Vastu Sangrahalaya (CSMVS)</div><div>159-161, Mahatma Gandhi Road, Fort</div><div>Mumbai 400 001</div>",
+            "estBillableWithCourse": true,
+            "filter_locationId": "F 05001304",
+            "APPEND": true,
+            "locationName": "Mumbai",
+            "isClass": false,
+            "variantId": "",
+            "availability": 1,
+            "evObIdFlw": "",
+            "modularPrices": [
+                {
+                    "moduleCount": "1",
+                    "price": 5300.0,
+                    "priceRate": 5300.0,
+                    "priceIntern": 4000.0,
+                    "priceInternRate": 4000.0
+                },
+                {
+                    "moduleCount": "2",
+                    "price": 10600.0,
+                    "priceRate": 10600.0,
+                    "priceIntern": 8000.0,
+                    "priceInternRate": 8000.0
+                },
+                {
+                    "moduleCount": "3",
+                    "price": 15900.0,
+                    "priceRate": 15900.0,
+                    "priceIntern": 12000.0,
+                    "priceInternRate": 12000.0
+                },
+                {
+                    "moduleCount": "4",
+                    "price": 21200.0,
+                    "priceRate": 21200.0,
+                    "priceIntern": 16000.0,
+                    "priceInternRate": 16000.0
+                }
+            ],
+            "isYouthCourse": false,
+            "teachingUnitsPerWeek": 0.0,
+            "buttonLink": "https://www.goethe.de/coe?lang=en&prod=O%2010000356SM05004119%20%20%20%20%20%20000000002025020%20%20%20%20%20%20%20%20%20%20000",
+            "ageFrom": 16,
+            "isGroupBooking": false,
+            "variantIdFlw": "",
+            "priceInternal": " INR 16,000.00",
+            "teachingUnitsTotal": 0.0,
+            "modules": [
+                {
+                    "date": "2025-10-15",
+                    "ceId": "CE05005351",
+                    "startTime": "09:15:00.000",
+                    "isOdpExam": false,
+                    "endTime": "09:55:00.000",
+                    "minutesExamLeadTime": "000",
+                    "minutesExamDuration": "000",
+                    "type": "0011"
+                },
+                {
+                    "date": "2025-10-15",
+                    "ceId": "CE05005352",
+                    "startTime": "10:45:00.000",
+                    "isOdpExam": false,
+                    "endTime": "11:50:00.000",
+                    "minutesExamLeadTime": "000",
+                    "minutesExamDuration": "000",
+                    "type": "0012"
+                },
+                {
+                    "date": "2025-10-15",
+                    "ceId": "CE05005353",
+                    "startTime": "12:15:00.000",
+                    "isOdpExam": false,
+                    "endTime": "13:30:00.000",
+                    "minutesExamLeadTime": "000",
+                    "minutesExamDuration": "000",
+                    "type": "0013"
+                },
+                {
+                    "ceId": "CE05005354",
+                    "startTime": "00:00:00.000",
+                    "isOdpExam": false,
+                    "endTime": "00:00:00.000",
+                    "minutesExamLeadTime": "000",
+                    "minutesExamDuration": "000",
+                    "type": "0014"
+                }
+            ],
+            "languageLevelGroup": "138",
+            "clevels": [],
+            "isOnlineLiveCourse": false,
+            "encOID": "0F5F9B8B858CF3D5D98E5EC77DCD0D0678D78A2FBB92AFE35CAC05AE83929DA9DFCDBD9F8D127847DAEAACD202D34FD1BBF88C95028004CCA72CD042CF85C0EE",
+            "availabilityText": "Book",
+            "singleModulePriceText": "INR 5,300.00",
+            "priceForRanges": [],
+            "acadPeriod": "020",
+            "durationWeeks": "0 Week",
+            "publishFrom": "15.09.2025",
+            "price": " INR 21,200.00",
+            "majorityAge": "18",
+            "isBlended": false,
+            "paymentModes": [
+                {
+                    "paymentMode": "KART",
+                    "cardType": "0001"
+                },
+                {
+                    "paymentMode": "KART",
+                    "cardType": "0003"
+                },
+                {
+                    "paymentMode": "KART",
+                    "cardType": "0023"
+                },
+                {
+                    "paymentMode": "KART",
+                    "cardType": "0002"
+                }
+            ],
+            "oid": "2faab28c6a9436d1f1ebaf00ea245afec7cc65c974a5444ee32fe5b202cd2b91",
+            "bookFromTimeFormatted": "10:00 AM",
+            "instituteId": "O 10000356",
+            "FILTERMESSAGE": "",
+            "eventDescription": "<h2>Parts of the exam</h2><div>The exam consists of four modules:</div><div>Listening 40 minutes</div><div>Reading 65 minutes</div><div>Writing 75 minutes</div><div>Speaking 15 minutes</div><div><br/></div><h2>Prerequisites for participation</h2><div>recommended from 16 years of age</div><div><br/></div><h2>Minimum number of participants</h2><div>The minimum number of participants is 10. If the minimum number of participants is not reached, the examination will not take place as a consequence. In such a case, we will do our best to offer you an alternative in good time. If you do not want to accept the suggested alternative, any payments already made will be promptly refunded.</div>",
+            "onlyWithAcc": false,
+            "languageSubLevel": "B2",
+            "startMonth": 10,
+            "modulePriceText": "Single module INR 5,300.00",
+            "publishToTime": "23:59:59.000",
+            "skillLevel": "B1",
+            "pspElement": "AB2A",
+            "evObId": "",
+            "bookFromStampLocalTime": 0.0,
+            "isOnlyBookAllExamParts": false,
+            "bookFromStamp": "2025-09-17T04:30:00.000Z",
+            "acadYear": "2025",
+            "STARTDATE_ALTERNATIVE": "15.10.2025",
+            "startDate": "15.10.2025",
+            "filter_languagelevelmin": "B2",
+            "isDigital": false,
+            "AppendToLocalCourses": false,
+            "capacityOptimal": 0,
+            "languageLevelBase": "B2",
+            "APPENDFILTERLIST": true,
+            "detailText": "Details",
+            "eventWeekdays": "",
+            "bookFromStampLocal": "September, 17 2025 04:30:00",
+            "publishFromStamp": "2025-09-14T18:30:00.000Z",
+            "defaultLanguage": "de",
+            "filter_languagelevelmax": "B2",
+            "languageLevel": "B2",
+            "eventNameObjectId": "SM05004119",
+            "estMandatory": false,
+            "filter_locationName": "Mumbai",
+            "currency": "INR",
+            "publishFromTime": "00:00:00.000",
+            "capacityMax": 0,
+            "targetGroup": "ER",
+            "priceInternRate": 16000.0,
+            "endDate": "15.10.2025",
+            "offerKeyID": "O10000356SM05004119000000002025020000",
+            "publishTo": "15.10.2025",
+            "PRICEDEFAULT": 21200.0,
+            "priceRate": 21200.0,
+            "locationTexts": [
+                {
+                    "objectId": "F 05001304",
+                    "eventId": "00000000",
+                    "text": "Mumbai",
+                    "textKey": "F 05001304000000009005deO 10000356",
+                    "type": "9005",
+                    "lang": "de"
+                },
+                {
+                    "objectId": "F 05001304",
+                    "eventId": "00000000",
+                    "text": "Mumbai",
+                    "textKey": "F 05001304000000009005enO 10000356",
+                    "type": "9005",
+                    "lang": "en"
+                },
+                {
+                    "objectId": "F 05001304",
+                    "eventId": "00000000",
+                    "text": "<div>Goethe-Institut / Max Mueller Bhavan Mumbai</div><div>Chhatrapati Shivaji Maharaj Vastu Sangrahalaya (CSMVS)</div><div>159-161, Mahatma Gandhi Road, Fort</div><div>Mumbai 400 001</div>",
+                    "textKey": "F 05001304000000009008deO 10000356",
+                    "type": "9008",
+                    "lang": "de"
+                },
+                {
+                    "objectId": "F 05001304",
+                    "eventId": "00000000",
+                    "text": "<div>Goethe-Institut / Max Mueller Bhavan Mumbai</div><div>Chhatrapati Shivaji Maharaj Vastu Sangrahalaya (CSMVS)</div><div>159-161, Mahatma Gandhi Road, Fort</div><div>Mumbai 400 001</div>",
+                    "textKey": "F 05001304000000009008enO 10000356",
+                    "type": "9008",
+                    "lang": "en"
+                }
+            ],
+            "isModular": true,
+            "bookFromTime": "10:00:00.000",
+            "buttonColor": "btnGruen icon-double-arrow-right",
+            "buttonDisabled": "",
+            "multilevel": 0,
+            "isIndividualCourse": false,
+            "keyAccounts": []
+        }]

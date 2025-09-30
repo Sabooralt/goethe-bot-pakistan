@@ -18,10 +18,12 @@ export const handleBookingConflict = async (page: Page) => {
 
       console.log("✅ Navigated after discarding other booking");
 
-      return true; 
+      return true;
     }
   } catch (error: any) {
     console.error("❌ Error handling booking conflict:", error.message);
+
+    return false;
   }
 
   return false; // no conflict detected

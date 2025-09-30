@@ -84,8 +84,7 @@ async function waitForAvailableDisplay(
     // Exponential backoff: 1s, 2s, 4s, 8s... up to 30s
     const waitTime = Math.min(1000 * Math.pow(2, attempt), 30000);
     console.log(
-      `⏳ All displays busy, waiting ${
-        waitTime / 1000
+      `⏳ All displays busy, waiting ${waitTime / 1000
       }s before retry (attempt ${attempt + 1}/${maxRetries})`
     );
     await new Promise((resolve) => setTimeout(resolve, waitTime));
@@ -126,7 +125,6 @@ async function createBrowserInstance(
           "--disable-features=VizDisplayCompositor",
           `--display=${display}`,
 
-          // Disable unnecessary features for speed
           "--disable-gpu",
           "--disable-software-rasterizer",
           "--disable-background-timer-throttling",
@@ -176,27 +174,33 @@ async function createBrowserInstance(
 
       const page = await browser.newPage();
 
+      /*  await page.authenticate({
+         username: "fqzswucp-rotate",
+         password: "jonjzja5h9aa",     
+       }); */
+
       // Performance optimizations for the page
-      await page.setViewport({ width: 1280, height: 720 });
+      await page.setViewport({ width: 1920, height: 1080 });
       await page.setDefaultNavigationTimeout(30000);
-      await page.setDefaultTimeout(30000);
+      await page.setDefaultTimeout(18000000);
 
       // Disable unnecessary features for speed
-      await page.setRequestInterception(false); // Only enable if you need to block resources
 
-      // Optional: Block images/fonts/media for even faster loading
-      // Uncomment if your automation doesn't need these resources
-      /*
+
       await page.setRequestInterception(true);
-      page.on('request', (req) => {
+      page.on("request", (req) => {
         const resourceType = req.resourceType();
-        if (['image', 'font', 'media'].includes(resourceType)) {
+        if (
+          resourceType === "image" ||
+          resourceType === "font" ||
+          resourceType === "media" ||
+          resourceType === "other"
+        ) {
           req.abort();
         } else {
           req.continue();
         }
       });
-      */
 
       // Test that browser is working
       await page.goto("about:blank");
@@ -255,8 +259,8 @@ async function closeBrowserInstance(
     // Force kill if normal close fails
     try {
       const pages = await browserInstance.browser.pages();
-      await Promise.all(pages.map((page) => page.close().catch(() => {})));
-      await browserInstance.browser.close().catch(() => {});
+      await Promise.all(pages.map((page) => page.close().catch(() => { })));
+      await browserInstance.browser.close().catch(() => { });
     } catch {
       // Ignore errors in force close
     }
@@ -305,9 +309,8 @@ async function processAccount(
     const displayInfo = {
       display: display,
       displayNumber: display.replace(":", ""),
-      noVncUrl: `http://${process.env.SERVER_IP || "localhost"}:${
-        6080 + displayNumber
-      }/vnc.html`,
+      noVncUrl: `http://${process.env.SERVER_IP || "localhost"}:${6080 + displayNumber
+        }/vnc.html`,
       vncPort: 5900 + displayNumber,
     };
 
@@ -316,7 +319,7 @@ async function processAccount(
     );
 
     // Add timeout for booking process
-    const bookingTimeout = 5 * 60 * 1000; // 5 minutes timeout
+    const bookingTimeout = 5 * 60 * 60 * 1000;
     await Promise.race([
       startBooking(browserInstance.page, account, oid, bot, displayInfo),
       new Promise((_, reject) =>
@@ -342,10 +345,10 @@ async function processAccount(
         await bot.sendMessage(
           user.telegramId,
           `📊 **Progress Update**\n` +
-            `📝 Schedule: ${schedule.name}\n` +
-            `✅ Processed: ${scheduleManager.processedCount}/${totalAccounts}\n` +
-            `🎯 Successful: ${scheduleManager.successCount}\n` +
-            `❌ Errors: ${scheduleManager.errorCount}`,
+          `📝 Schedule: ${schedule.name}\n` +
+          `✅ Processed: ${scheduleManager.processedCount}/${totalAccounts}\n` +
+          `🎯 Successful: ${scheduleManager.successCount}\n` +
+          `❌ Errors: ${scheduleManager.errorCount}`,
           { parse_mode: "Markdown" }
         );
       }
@@ -361,9 +364,9 @@ async function processAccount(
       await bot.sendMessage(
         account.user.telegramId,
         `❌ **Account Error**\n` +
-          `📧 Account: ${account.email}\n` +
-          `🚨 Error: ${(accountError as Error).message}\n` +
-          `⏰ Time: ${new Date().toLocaleString()}`,
+        `📧 Account: ${account.email}\n` +
+        `🚨 Error: ${(accountError as Error).message}\n` +
+        `⏰ Time: ${new Date().toLocaleString()}`,
         { parse_mode: "Markdown" }
       );
     }
@@ -377,9 +380,9 @@ async function processAccount(
       await bot.sendMessage(
         user.telegramId,
         `⚠️ **Account Error in Schedule**\n` +
-          `📝 Schedule: ${schedule.name}\n` +
-          `📧 Account: ${account.email}\n` +
-          `❌ Error: ${(accountError as Error).message}`,
+        `📝 Schedule: ${schedule.name}\n` +
+        `📧 Account: ${account.email}\n` +
+        `❌ Error: ${(accountError as Error).message}`,
         { parse_mode: "Markdown" }
       );
     }
@@ -441,10 +444,10 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
       await bot.sendMessage(
         user.telegramId,
         `🚀 **Automation Started**\n` +
-          `📝 Schedule: ${schedule.name}\n` +
-          `🆔 OID: ${oid}\n` +
-          `📺 Display pool: ${displayPool.length} displays\n` +
-          `⚡ Initializing browsers...`,
+        `📝 Schedule: ${schedule.name}\n` +
+        `🆔 OID: ${oid}\n` +
+        `📺 Display pool: ${displayPool.length} displays\n` +
+        `⚡ Initializing browsers...`,
         { parse_mode: "Markdown" }
       );
     }
@@ -472,9 +475,9 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
         await bot.sendMessage(
           user.telegramId,
           `❌ **Schedule Failed**\n` +
-            `📝 Schedule: ${schedule.name}\n` +
-            `🚨 Error: ${errorMsg}\n` +
-            `💡 Please add active accounts and try again.`,
+          `📝 Schedule: ${schedule.name}\n` +
+          `🚨 Error: ${errorMsg}\n` +
+          `💡 Please add active accounts and try again.`,
           { parse_mode: "Markdown" }
         );
       }
@@ -487,9 +490,9 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
       await bot.sendMessage(
         user.telegramId,
         `🔄 **Processing Accounts**\n` +
-          `📝 Schedule: ${schedule.name}\n` +
-          `👥 Found ${accounts.length} active accounts\n` +
-          `⚡ Starting booking process...`,
+        `📝 Schedule: ${schedule.name}\n` +
+        `👥 Found ${accounts.length} active accounts\n` +
+        `⚡ Starting booking process...`,
         { parse_mode: "Markdown" }
       );
     }
@@ -574,14 +577,14 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
         status: wasStopped
           ? "stopped"
           : isSuccess
-          ? "success"
-          : "partial_success",
+            ? "success"
+            : "partial_success",
         lastRun: new Date(),
         lastError: wasStopped
           ? "Schedule stopped by user request"
           : isSuccess
-          ? null
-          : `${scheduleManager.errorCount} accounts failed out of ${accounts.length}`,
+            ? null
+            : `${scheduleManager.errorCount} accounts failed out of ${accounts.length}`,
       });
 
       // Send final notification
@@ -590,20 +593,20 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
         const statusText = wasStopped
           ? "Stopped by User"
           : isSuccess
-          ? "Completed Successfully"
-          : "Completed with Errors";
+            ? "Completed Successfully"
+            : "Completed with Errors";
 
         await bot.sendMessage(
           user.telegramId,
           `${statusIcon} **Schedule ${statusText}**\n` +
-            `📝 Schedule: ${schedule.name}\n` +
-            `👥 Total accounts: ${accounts.length}\n` +
-            `✅ Successful: ${scheduleManager.successCount}\n` +
-            `❌ Errors: ${scheduleManager.errorCount}\n` +
-            `⏰ Completed at: ${new Date().toLocaleString()}\n\n` +
-            (wasStopped
-              ? `⏹️ Schedule was stopped by user request.`
-              : isSuccess
+          `📝 Schedule: ${schedule.name}\n` +
+          `👥 Total accounts: ${accounts.length}\n` +
+          `✅ Successful: ${scheduleManager.successCount}\n` +
+          `❌ Errors: ${scheduleManager.errorCount}\n` +
+          `⏰ Completed at: ${new Date().toLocaleString()}\n\n` +
+          (wasStopped
+            ? `⏹️ Schedule was stopped by user request.`
+            : isSuccess
               ? `🎉 All accounts processed successfully!`
               : `⚠️ Some accounts encountered errors. Check individual account notifications for details.`),
           { parse_mode: "Markdown" }
@@ -628,10 +631,10 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
       await bot.sendMessage(
         user.telegramId,
         `❌ **Schedule Failed**\n` +
-          `📝 Schedule: ${schedule.name}\n` +
-          `🚨 System Error: ${errorMessage}\n` +
-          `⏰ Failed at: ${new Date().toLocaleString()}\n\n` +
-          `💡 This appears to be a system error. Please try again or contact support.`,
+        `📝 Schedule: ${schedule.name}\n` +
+        `🚨 System Error: ${errorMessage}\n` +
+        `⏰ Failed at: ${new Date().toLocaleString()}\n\n` +
+        `💡 This appears to be a system error. Please try again or contact support.`,
         { parse_mode: "Markdown" }
       );
     }
@@ -715,9 +718,9 @@ export const stopSchedule = async (scheduleId: string): Promise<boolean> => {
           await bot.sendMessage(
             user.telegramId,
             `🛑 **Schedule Stopped**\n` +
-              `📝 Schedule: ${schedule.name}\n` +
-              `⚠️ Booking process was stopped by request\n` +
-              `⏰ Stopped at: ${new Date().toLocaleString()}`,
+            `📝 Schedule: ${schedule.name}\n` +
+            `⚠️ Booking process was stopped by request\n` +
+            `⏰ Stopped at: ${new Date().toLocaleString()}`,
             { parse_mode: "Markdown" }
           );
         }

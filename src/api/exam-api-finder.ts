@@ -207,7 +207,7 @@ class ExamApiMonitor {
       onExamWithOid,
       onTimeout,
       stopOnFirstOid = true,
-      maxDurationMs = 30 * 60 * 1000,
+      maxDurationMs = 5 * 60 * 60 * 1000,
       priorityLocations = ["chennai", "bengal", "bangalore"], // Default priority locations
     } = options;
 
@@ -555,9 +555,9 @@ export { ExamApiMonitor };
 
 // Updated legacy function with location priority
 export async function pollExamApi(
-  runAt: Date = new Date("2025-09-21T09:00:00.000+00:00"),
+  runAt: Date,
   interval = 5000,
-  priorityLocations: string[] = ["chennai", "bengal", "bangalore"]
+  priorityLocations: string[] = ["new delhi", "bengal", "bangalore"]
 ) {
   await examMonitor.startPolling(runAt, {
     interval,
