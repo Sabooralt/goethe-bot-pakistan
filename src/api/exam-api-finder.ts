@@ -1,6 +1,12 @@
 import puppeteer from "puppeteer";
 import axios from "axios";
 import { runAllAccounts } from "../cluster/runCluster";
+import dotenv from "dotenv";
+dotenv.config();
+
+const targetPageUrl =
+  process.env.TARGET_PAGE_URL ||
+  "https://www.goethe.de/ins/pk/en/spr/prf/gzb2.cfm";
 
 interface ExamModule {
   date: string;
@@ -103,13 +109,10 @@ class ExamApiMonitor {
           });
 
           try {
-            await page.goto(
-              "https://www.goethe.de/ins/in/en/spr/prf/gzb2.cfm",
-              {
-                waitUntil: "networkidle2",
-                timeout: 25000,
-              }
-            );
+            await page.goto(targetPageUrl, {
+              waitUntil: "networkidle2",
+              timeout: 25000,
+            });
 
             // Additional wait to ensure all requests are captured
             await new Promise((resolve) => setTimeout(resolve, 5000));
