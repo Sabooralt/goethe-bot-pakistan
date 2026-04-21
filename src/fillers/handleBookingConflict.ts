@@ -16,12 +16,12 @@ export const handleBookingConflict = async (page: Page) => {
         page.click(discardOtherButtonSelector),
       ]);
 
-      console.log("✅ Navigated after discarding other booking");
+      console.log("Navigated after discarding other booking");
 
       return true;
     }
   } catch (error: any) {
-    console.error("❌ Error handling booking conflict:", error.message);
+    console.error("Error handling booking conflict:", error.message);
 
     return false;
   }

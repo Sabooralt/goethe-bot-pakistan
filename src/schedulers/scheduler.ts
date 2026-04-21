@@ -34,16 +34,16 @@ class ExamScheduler {
       try {
         await this.checkAndStartMonitoring();
       } catch (error) {
-        console.error("❌ Scheduler error:", error);
+        console.error("Scheduler error:", error);
       }
     }, 30000); // Check every 30 seconds
 
     // Initial check on startup
     this.checkAndStartMonitoring().catch((error) => {
-      console.error("❌ Initial scheduler check failed:", error);
+      console.error("Initial scheduler check failed:", error);
     });
 
-    console.log("✅ Exam scheduler started successfully");
+    console.log("Exam scheduler started successfully");
   }
 
   /**
@@ -63,7 +63,7 @@ class ExamScheduler {
     }
 
     this.isRunning = false;
-    console.log("✅ Exam scheduler stopped");
+    console.log("Exam scheduler stopped");
   }
 
   /**
@@ -99,7 +99,7 @@ class ExamScheduler {
           await this.startMonitoringForSchedule(schedule);
         } catch (error) {
           console.error(
-            `❌ Failed to start monitoring for schedule ${schedule._id}:`,
+            `Failed to start monitoring for schedule ${schedule._id}:`,
             error
           );
           await this.updateScheduleWithError(
@@ -113,7 +113,7 @@ class ExamScheduler {
       // Clean up completed monitoring sessions
       await this.cleanupCompletedSessions();
     } catch (error) {
-      console.error("❌ Error checking schedules:", error);
+      console.error("Error checking schedules:", error);
     }
   }
 
@@ -133,7 +133,7 @@ class ExamScheduler {
 
     const user = await User.findById(schedule.createdBy);
     if (!user) {
-      console.error(`❌ User not found for schedule ${schedule.name}`);
+      console.error(`User not found for schedule ${schedule.name}`);
       await this.updateScheduleWithError(
         scheduleId,
         "User not found",
@@ -186,7 +186,7 @@ class ExamScheduler {
             user.telegramId,
             `📋 **Exam Found**\n` +
               `📝 Schedule: ${schedule.name}\n` +
-              `✅ Exam slot detected with ${
+              `Exam slot detected with ${
                 exam.modules?.length || 0
               } modules\n` +
               `⏳ Waiting for booking to become available...`
@@ -214,7 +214,7 @@ class ExamScheduler {
               // Note: Success notification is handled in runAllAccounts
             } else {
               const errorMsg = "No OID found on exam";
-              console.log(`❌ [${schedule.name}] ${errorMsg}`);
+              console.log(`[${schedule.name}] ${errorMsg}`);
               await this.updateScheduleWithError(
                 scheduleId,
                 errorMsg,
@@ -223,7 +223,7 @@ class ExamScheduler {
             }
           } catch (automationError) {
             console.error(
-              `❌ [${schedule.name}] Automation failed:`,
+              `[${schedule.name}] Automation failed:`,
               automationError
             );
             await this.updateScheduleWithError(
@@ -246,7 +246,7 @@ class ExamScheduler {
             user.telegramId,
             `⏰ **Schedule Timeout**\n` +
               `📝 Schedule: ${schedule.name}\n` +
-              `❌ No exam slots found within 5 hours\n` +
+              `No exam slots found within 5 hours\n` +
               `💡 The exam might not be available yet. You can create a new schedule to try again later.`
           );
 
@@ -265,7 +265,7 @@ class ExamScheduler {
       });
     } catch (monitoringError) {
       console.error(
-        `❌ Failed to start polling for schedule ${schedule.name}:`,
+        `Failed to start polling for schedule ${schedule.name}:`,
         monitoringError
       );
 
@@ -306,7 +306,7 @@ class ExamScheduler {
       if (user.telegramId) {
         await this.sendLogToUser(
           user.telegramId,
-          `❌ **Schedule Error**\n` +
+          `**Schedule Error**\n` +
             `📝 Schedule: ${schedule.name}\n` +
             `🚨 Error: ${context}\n` +
             `💬 Details: ${errorMessage}\n` +
@@ -326,7 +326,7 @@ class ExamScheduler {
     try {
       await bot.sendMessage(telegramId, message, { parse_mode: "Markdown" });
     } catch (error) {
-      console.error(`❌ Failed to send log to user ${telegramId}:`, error);
+      console.error(`Failed to send log to user ${telegramId}:`, error);
     }
   }
 
@@ -375,14 +375,14 @@ class ExamScheduler {
               session.userId,
               `⏰ **Schedule Expired**\n` +
                 `📝 Schedule: ${schedule.name}\n` +
-                `❌ Monitoring stopped - exam time has passed\n` +
+                `Monitoring stopped - exam time has passed\n` +
                 `💡 You can create a new schedule for future exams.`
             );
           }
         }
       } catch (error) {
         console.error(
-          `❌ Failed to update expired schedule ${scheduleId}:`,
+          `Failed to update expired schedule ${scheduleId}:`,
           error
         );
       }
@@ -471,7 +471,7 @@ class ExamScheduler {
         }
       );
     } catch (error) {
-      console.error("❌ Failed to reset monitoring flags:", error);
+      console.error("Failed to reset monitoring flags:", error);
     }
   }
 
@@ -500,11 +500,11 @@ class ExamScheduler {
 
       await this.startMonitoringForSchedule(schedule);
       console.log(
-        `✅ Manually triggered monitoring for schedule ${scheduleId}`
+        `Manually triggered monitoring for schedule ${scheduleId}`
       );
     } catch (error) {
       console.error(
-        `❌ Failed to manually trigger schedule ${scheduleId}:`,
+        `Failed to manually trigger schedule ${scheduleId}:`,
         error
       );
       throw error;
@@ -544,7 +544,7 @@ class ExamScheduler {
         }
       }
     } catch (error) {
-      console.error(`❌ Failed to send schedule log for ${scheduleId}:`, error);
+      console.error(`Failed to send schedule log for ${scheduleId}:`, error);
     }
   }
 }

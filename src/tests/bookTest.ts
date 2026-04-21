@@ -138,10 +138,10 @@ const run = async () => {
       pageTitle.includes("unterbrechung") ||
       /http\s?\d{3}/i.test(pageTitle)
     ) {
-      console.error(`❗ Booking error detected on attempt ${attempt}`);
+      console.error(`Booking error detected on attempt ${attempt}`);
 
       if (attempt === maxRetries) {
-        console.log("❌ Max retries reached. Stopping booking.");
+        console.log("Max retries reached. Stopping booking.");
         return;
       }
       continue;
@@ -152,14 +152,14 @@ const run = async () => {
     const availableModules = await selectAvailableModules(page, accountModules);
 
     if (!availableModules) {
-      console.log("❌ No modules available, stopping booking.");
+      console.log("No modules available, stopping booking.");
     }
 
     await page.waitForSelector("button.cs-button--arrow_next", {
       visible: true,
     });
     await page.click("button.cs-button--arrow_next");
-    console.log('✅ Clicked "weiter" button');
+    console.log('Clicked "weiter" button');
 
     await page.waitForNavigation({
       waitUntil: "domcontentloaded",
@@ -179,7 +179,7 @@ const run = async () => {
     await page.type("#username", "Jerinjoseph898@gmail.com");
 
     await page.type("#password", "Jerin@898");
-    console.log("✅ Submitted login form");
+    console.log("Submitted login form");
 
     await page.click('input[type="submit"][name="submit"]');
     console.log("🚀 Submitted login form");
@@ -202,7 +202,7 @@ const run = async () => {
         waitUntil: "networkidle2",
         timeout: 5000,
       });
-      console.log("✅ Navigated after DOB form");
+      console.log("Navigated after DOB form");
     } catch {
       console.log("ℹ️ No navigation after DOB form (skipped step?)");
     }
@@ -219,10 +219,10 @@ const run = async () => {
       });
     }
 
-    console.log("✅ Navigated to payment page");
+    console.log("Navigated to payment page");
 
     let paymentMessage =
-      "✅ Redirected to the payment page.\n" +
+      "Redirected to the payment page.\n" +
       "💳 Please review all the details and complete the payment manually.\n" +
       "⏳ You have approximately *10 minutes* to finish the payment before the session expires.\n\n";
   } catch (err) {

@@ -51,7 +51,7 @@ export const selectAvailableModules = async (
 
       return false;
     } else {
-      console.log("✅ All required modules selected successfully.");
+      console.log("All required modules selected successfully.");
       return true
     }
   } catch (err) {

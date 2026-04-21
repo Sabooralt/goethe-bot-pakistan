@@ -13,10 +13,10 @@ import { runAllAccounts } from "../cluster/runCluster";
           // Note: Success notification is handled in runAllAccounts
         } else {
           const errorMsg = "No OID found on exam";
-          console.log(`❌  ${errorMsg}`);
+          console.log(` ${errorMsg}`);
         }
       } catch (automationError) {
-        console.error(`❌ Automation failed:`, automationError);
+        console.error(`Automation failed:`, automationError);
       }
     },
   });

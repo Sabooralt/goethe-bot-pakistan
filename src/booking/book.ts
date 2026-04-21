@@ -93,13 +93,13 @@ const startBooking = async (
       pageTitle.includes("unterbrechung") ||
       /http\s?\d{3}/i.test(pageTitle)
     ) {
-      console.error(`❗ Booking error detected, retrying... (elapsed ${Math.round(elapsed / 60000)} min)`);
+      console.error(`Booking error detected, retrying... (elapsed ${Math.round(elapsed / 60000)} min)`);
 
       sendAccountLog(
         bot,
         chatId,
         acc,
-        `❗ Booking error detected, retrying...\nElapsed: ${Math.round(elapsed / 60000)} minutes`
+        `Booking error detected, retrying...\nElapsed: ${Math.round(elapsed / 60000)} minutes`
       );
 
       await delay(5000);
@@ -132,7 +132,7 @@ const startBooking = async (
         bot,
         chatId,
         acc,
-        "❌ Required modules not available, stopping booking."
+        "Required modules not available, stopping booking."
       );
       return;
     }
@@ -143,7 +143,7 @@ const startBooking = async (
       visible: true,
     });
     await page.click("button.cs-button--arrow_next");
-    console.log('✅ Clicked "weiter" button');
+    console.log('Clicked "weiter" button');
 
     await page.waitForNavigation({
       waitUntil: "domcontentloaded",
@@ -165,7 +165,7 @@ const startBooking = async (
     await page.type("#password", acc.password);
 
     await page.click('input[type="submit"][name="submit"]');
-    sendAccountLog(bot, chatId, acc, "✅ Submitted out login form");
+    sendAccountLog(bot, chatId, acc, "Submitted out login form");
     console.log("🚀 Submitted login form");
 
     try {
@@ -179,7 +179,7 @@ const startBooking = async (
         bot,
         chatId,
         acc,
-        "❌ Error logging in, Please verify credentials."
+        "Error logging in, Please verify credentials."
       );
       return;
     }
@@ -193,7 +193,7 @@ const startBooking = async (
         waitUntil: "networkidle2",
         timeout: 5000,
       });
-      console.log("✅ Navigated after DOB form");
+      console.log("Navigated after DOB form");
     } catch {
       console.log("ℹ️ No navigation after DOB form (skipped step?)");
     }
@@ -210,10 +210,10 @@ const startBooking = async (
       });
     }
 
-    console.log("✅ Navigated to payment page");
+    console.log("Navigated to payment page");
 
     let paymentMessage =
-      "✅ Redirected to the payment page.\n" +
+      "Redirected to the payment page.\n" +
       "💳 Please review all the details and complete the payment manually.\n" +
       "⏳ You have approximately *30 minutes* to finish the payment before the session expires.\n\n";
 
@@ -250,14 +250,14 @@ const startBooking = async (
       chatId,
       acc,
       "⏰ Session timeout reached. Account has been disabled.\n" +
-      "✅ If payment was completed successfully, the booking should be confirmed."
+      "If payment was completed successfully, the booking should be confirmed."
     );
   } catch (err) {
     sendAccountLog(
       bot,
       chatId,
       acc,
-      `❌ Booking process failed: ${(err as Error).message}` +
+      `Booking process failed: ${(err as Error).message}` +
       (displayInfo
         ? `\n🖥️ You can still access the browser at: ${displayInfo.noVncUrl}`
         : "")

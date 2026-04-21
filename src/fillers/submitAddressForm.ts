@@ -18,7 +18,7 @@ async function typeIfEmpty(page: Page, selector: string, value: string) {
   }
 
   await page.type(selector, value);
-  console.log(`✅ Filled ${selector} with "${value}"`);
+  console.log(`Filled ${selector} with "${value}"`);
 }
 
 export const submitAddressForm = async (page: Page, acc: AccountDocument) => {
@@ -30,7 +30,7 @@ export const submitAddressForm = async (page: Page, acc: AccountDocument) => {
     console.log("ℹ️ Address form not present, skipping...");
     return;
   }
-  console.log("✅ Address form loaded");
+  console.log("Address form loaded");
 
   await typeIfEmpty(
     page,
@@ -69,7 +69,7 @@ export const submitAddressForm = async (page: Page, acc: AccountDocument) => {
 
     if (!existingBirthplace) {
       await placeOfBirthInput.type(acc.details.address.city);
-      console.log(`✅ Filled birthplace with "${acc.details.address.city}"`);
+      console.log(`Filled birthplace with "${acc.details.address.city}"`);
     } else {
       console.log(`ℹ️ Skipping birthplace, already "${existingBirthplace}"`);
     }
@@ -86,6 +86,6 @@ export const submitAddressForm = async (page: Page, acc: AccountDocument) => {
         motivationValue.dispatchEvent(new Event("change", { bubbles: true }));
       }
     });
-    console.log("✅ Set motivation select to BookingReasonOther");
+    console.log("Set motivation select to BookingReasonOther");
   }
 };

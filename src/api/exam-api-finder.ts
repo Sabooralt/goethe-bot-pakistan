@@ -21,7 +21,7 @@ interface ExamData {
   bookFrom?: string;
   bookTo?: string;
   eventName?: string;
-  locationName?: string; // Added location name property
+  locationName?: string; 
   [key: string]: any;
 }
 
@@ -100,7 +100,7 @@ class ExamApiMonitor {
 
             const url = response.url();
             if (url.includes("examfinder")) {
-              console.log("✅ Captured API URL:", url);
+              console.log("Captured API URL:", url);
               this.apiUrl = url;
               apiUrlCaptured = true;
               clearTimeout(timeoutId);
@@ -122,7 +122,7 @@ class ExamApiMonitor {
               resolve(null);
             }
           } catch (error) {
-            console.error(`❌ Navigation error on attempt ${attempt}:`, error);
+            console.error(`Navigation error on attempt ${attempt}:`, error);
             clearTimeout(timeoutId);
             resolve(null);
           }
@@ -131,11 +131,11 @@ class ExamApiMonitor {
         await browser.close();
 
         if (apiUrl) {
-          console.log(`✅ Successfully captured API URL on attempt ${attempt}`);
+          console.log(`Successfully captured API URL on attempt ${attempt}`);
           return apiUrl;
         }
       } catch (error) {
-        console.error(`❌ Browser error on attempt ${attempt}:`, error);
+        console.error(`Browser error on attempt ${attempt}:`, error);
         if (browser) {
           try {
             await browser.close();
@@ -147,12 +147,12 @@ class ExamApiMonitor {
 
       // Wait before retrying
       if (attempt < maxRetries) {
-        console.log(`⏳ Waiting ${retryDelay}ms before next attempt...`);
+        console.log(`Waiting ${retryDelay}ms before next attempt...`);
         await new Promise((resolve) => setTimeout(resolve, retryDelay));
       }
     }
 
-    console.error(`❌ Failed to capture API URL after ${maxRetries} attempts`);
+    console.error(`Failed to capture API URL after ${maxRetries} attempts`);
     return null;
   }
 
@@ -211,7 +211,7 @@ class ExamApiMonitor {
       onTimeout,
       stopOnFirstOid = true,
       maxDurationMs = 5 * 60 * 60 * 1000,
-      priorityLocations = ["chennai", "bengal", "bangalore"], // Default priority locations
+      priorityLocations = ["karachi", "islamabad", "bangalore"],
     } = options;
 
     // Reset flags
@@ -225,7 +225,7 @@ class ExamApiMonitor {
       await this.captureApiUrl();
 
       if (!this.apiUrl) {
-        console.error("❌ Could not capture API URL, aborting polling");
+        console.error("Could not capture API URL, aborting polling");
         return;
       }
     }
@@ -267,7 +267,7 @@ class ExamApiMonitor {
         try {
           await onTimeout();
         } catch (error) {
-          console.error("❌ Error in timeout callback:", error);
+          console.error("Error in timeout callback:", error);
         }
       }
 
@@ -335,7 +335,7 @@ class ExamApiMonitor {
           );
 
           const firstExam = matchingExams[0];
-          console.log(`✅ Found ${matchingExams.length} matching exam(s)`);
+          console.log(`Found ${matchingExams.length} matching exam(s)`);
 
           if (matchingExams.length > 1) {
             console.log(`🎯 Multiple exams found. Processing by priority:`);
@@ -379,7 +379,7 @@ class ExamApiMonitor {
               try {
                 await onExamFound(exam);
               } catch (error) {
-                console.error("❌ Error in onExamFound callback:", error);
+                console.error("Error in onExamFound callback:", error);
               }
             }
 
@@ -418,7 +418,7 @@ class ExamApiMonitor {
                     return;
                   }
                 } catch (error) {
-                  console.error("❌ Error in onExamWithOid callback:", error);
+                  console.error("Error in onExamWithOid callback:", error);
                   this.processingOid = false;
                 }
               }
@@ -443,7 +443,7 @@ class ExamApiMonitor {
           );
         }
       } catch (error: any) {
-        console.error("❌ Error polling API:", error.message);
+        console.error("Error polling API:", error.message);
 
         // If it's a network error, try to recapture the API URL
         if (
@@ -456,7 +456,7 @@ class ExamApiMonitor {
           this.apiUrl = null;
           const newUrl = await this.captureApiUrl(3, 5000); // Fewer retries for network errors
           if (!newUrl) {
-            console.error("❌ Failed to recapture API URL, stopping polling");
+            console.error("Failed to recapture API URL, stopping polling");
             this.stopPolling();
           }
         }
@@ -574,9 +574,9 @@ export async function pollExamApi(
       try {
         // Call runAllAccounts and wait for it to complete
         await runAllAccounts(exam.oid!);
-        console.log(`✅ Finished processing OID: ${exam.oid}`);
+        console.log(`Finished processing OID: ${exam.oid}`);
       } catch (error) {
-        console.error(`❌ Error processing OID ${exam.oid}:`, error);
+        console.error(`Error processing OID ${exam.oid}:`, error);
         throw error; // Re-throw to be handled by the monitor
       }
     },

@@ -208,7 +208,7 @@ async function createBrowserInstance(
       // Test that browser is working
       await page.goto("about:blank");
 
-      console.log(`✅ Browser created for ${account.email} on ${display}`);
+      console.log(`Browser created for ${account.email} on ${display}`);
 
       return {
         browser,
@@ -218,12 +218,12 @@ async function createBrowserInstance(
       };
     } catch (error) {
       console.error(
-        `❌ Failed to create browser for ${account.email} (attempt ${attempt}/${retries}):`,
+        `Failed to create browser for ${account.email} (attempt ${attempt}/${retries}):`,
         error
       );
 
       if (attempt === retries) {
-        console.error(`❌ All attempts failed for ${account.email}`);
+        console.error(`All attempts failed for ${account.email}`);
         return null;
       }
 
@@ -252,7 +252,7 @@ async function closeBrowserInstance(
       ),
     ]);
 
-    console.log(`✅ Browser closed for ${browserInstance.accountEmail}`);
+    console.log(`Browser closed for ${browserInstance.accountEmail}`);
   } catch (error) {
     console.error(
       `⚠️ Error closing browser for ${browserInstance.accountEmail}:`,
@@ -334,7 +334,7 @@ async function processAccount(
     scheduleManager.processedCount++;
     scheduleManager.successCount++;
 
-    console.log(`✅ Account ${account.email} processed successfully`);
+    console.log(`Account ${account.email} processed successfully`);
 
     // Send periodic updates
     const totalAccounts =
@@ -350,9 +350,9 @@ async function processAccount(
           user.telegramId,
           `📊 **Progress Update**\n` +
             `📝 Schedule: ${schedule.name}\n` +
-            `✅ Processed: ${scheduleManager.processedCount}/${totalAccounts}\n` +
+            `Processed: ${scheduleManager.processedCount}/${totalAccounts}\n` +
             `🎯 Successful: ${scheduleManager.successCount}\n` +
-            `❌ Errors: ${scheduleManager.errorCount}`,
+            `Errors: ${scheduleManager.errorCount}`,
           { parse_mode: "Markdown" }
         );
       }
@@ -361,13 +361,13 @@ async function processAccount(
     scheduleManager.processedCount++;
     scheduleManager.errorCount++;
 
-    console.error(`❌ Account ${account.email} failed:`, accountError);
+    console.error(`Account ${account.email} failed:`, accountError);
 
     // Send error notification to account owner
     if (account.user?.telegramId) {
       await bot.sendMessage(
         account.user.telegramId,
-        `❌ **Account Error**\n` +
+        `**Account Error**\n` +
           `📧 Account: ${account.email}\n` +
           `🚨 Error: ${(accountError as Error).message}\n` +
           `⏰ Time: ${new Date().toLocaleString()}`,
@@ -386,7 +386,7 @@ async function processAccount(
         `⚠️ **Account Error in Schedule**\n` +
           `📝 Schedule: ${schedule.name}\n` +
           `📧 Account: ${account.email}\n` +
-          `❌ Error: ${(accountError as Error).message}`,
+          `Error: ${(accountError as Error).message}`,
         { parse_mode: "Markdown" }
       );
     }
@@ -478,7 +478,7 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
       if (user?.telegramId && schedule) {
         await bot.sendMessage(
           user.telegramId,
-          `❌ **Schedule Failed**\n` +
+          `**Schedule Failed**\n` +
             `📝 Schedule: ${schedule.name}\n` +
             `🚨 Error: ${errorMsg}\n` +
             `💡 Please add active accounts and try again.`,
@@ -566,7 +566,7 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
     // Wait for all remaining promises to complete
     await Promise.allSettled(activePromises);
 
-    console.log("✅ All accounts processed!");
+    console.log("All accounts processed!");
     console.log(
       `📊 Final stats: ${scheduleManager.successCount} successful, ${scheduleManager.errorCount} errors out of ${accounts.length} total`
     );
@@ -605,8 +605,8 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
           `${statusIcon} **Schedule ${statusText}**\n` +
             `📝 Schedule: ${schedule.name}\n` +
             `👥 Total accounts: ${accounts.length}\n` +
-            `✅ Successful: ${scheduleManager.successCount}\n` +
-            `❌ Errors: ${scheduleManager.errorCount}\n` +
+            `Successful: ${scheduleManager.successCount}\n` +
+            `Errors: ${scheduleManager.errorCount}\n` +
             `⏰ Completed at: ${new Date().toLocaleString()}\n\n` +
             (wasStopped
               ? `⏹️ Schedule was stopped by user request.`
@@ -618,7 +618,7 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
       }
     }
   } catch (error) {
-    console.error("❌ Automation error:", error);
+    console.error("Automation error:", error);
     const errorMessage = (error as any).message || (error as string).toString();
 
     // Update schedule status if applicable
@@ -634,7 +634,7 @@ export const runAllAccounts = async (oid: string, scheduleId?: string) => {
     if (user?.telegramId && schedule) {
       await bot.sendMessage(
         user.telegramId,
-        `❌ **Schedule Failed**\n` +
+        `**Schedule Failed**\n` +
           `📝 Schedule: ${schedule.name}\n` +
           `🚨 System Error: ${errorMessage}\n` +
           `⏰ Failed at: ${new Date().toLocaleString()}\n\n` +
@@ -733,10 +733,10 @@ export const stopSchedule = async (scheduleId: string): Promise<boolean> => {
       // Remove from active schedules
       activeSchedules.delete(scheduleId);
 
-      console.log(`✅ Successfully stopped schedule ${scheduleId}`);
+      console.log(`Successfully stopped schedule ${scheduleId}`);
       return true;
     } catch (error) {
-      console.error(`❌ Error stopping schedule ${scheduleId}:`, error);
+      console.error(`Error stopping schedule ${scheduleId}:`, error);
       return false;
     }
   } else {
@@ -801,7 +801,7 @@ export const stopAllSchedules = async (): Promise<void> => {
   // Clear all display allocations
   activeDisplays.clear();
 
-  console.log("✅ All schedules stopped and displays released");
+  console.log("All schedules stopped and displays released");
 };
 
 // Get browsers for a specific schedule (useful for monitoring)

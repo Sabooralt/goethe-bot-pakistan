@@ -133,7 +133,7 @@ export const bot = new TelegramBot(token, { polling: true });
       schedulerRunning = true;
       examScheduler.start();
     } catch (err) {
-      console.error("❌ Startup error:", err);
+      console.error("Startup error:", err);
       schedulerRunning = false;
       throw err;
     }
@@ -330,7 +330,7 @@ export const bot = new TelegramBot(token, { polling: true });
       clearUserState(userId);
       await bot.sendMessage(
         chatId,
-        "❌ Sorry, there was an error. Please try again."
+        "Sorry, there was an error. Please try again."
       );
       showMainMenu(chatId);
     }
@@ -458,7 +458,7 @@ export const bot = new TelegramBot(token, { polling: true });
       await showModuleSelection(chatId, userId);
     } catch (error) {
       console.error("Error checking existing account:", error);
-      await bot.sendMessage(chatId, "❌ There was an error. Please try again.");
+      await bot.sendMessage(chatId, "There was an error. Please try again.");
     }
   };
 
@@ -493,7 +493,7 @@ export const bot = new TelegramBot(token, { polling: true });
         },
       ],
       [
-        { text: "✅ Confirm Selection", callback_data: "confirm_modules" },
+        { text: "Confirm Selection", callback_data: "confirm_modules" },
         { text: "Cancel", callback_data: "cancel" },
       ],
     ];
@@ -607,7 +607,7 @@ export const bot = new TelegramBot(token, { polling: true });
 
       await bot.sendMessage(
         chatId,
-        `✅ Successfully created account!\n\n` +
+        `Successfully created account!\n\n` +
           `📧 Email: ${userState.email}\n` +
           `🔧 Enabled Modules: ${modulesList}`
       );
@@ -618,7 +618,7 @@ export const bot = new TelegramBot(token, { polling: true });
       clearUserState(userId);
       await bot.sendMessage(
         chatId,
-        "❌ There was an error saving your account. Please try again."
+        "There was an error saving your account. Please try again."
       );
       showMainMenu(chatId);
     }
@@ -648,7 +648,7 @@ export const bot = new TelegramBot(token, { polling: true });
       if (!user) {
         await bot.sendMessage(
           chatId,
-          "❌ User not found. Please start with /start command."
+          "User not found. Please start with /start command."
         );
         return;
       }
@@ -664,7 +664,7 @@ export const bot = new TelegramBot(token, { polling: true });
             if (account.modules?.write) modules.push("write");
             if (account.modules?.speak) modules.push("speak");
             const enabledModules = modules.length ? modules.join(", ") : "None";
-            const status = account.status ? "✅ Active" : "❌ Inactive";
+            const status = account.status ? "Active" : "Inactive";
 
             return (
               `${index + 1}. **ID:** \`${account._id}\`\n` +
@@ -683,7 +683,7 @@ export const bot = new TelegramBot(token, { polling: true });
           }
         );
       } else {
-        await bot.sendMessage(chatId, "❌ You have no added accounts.");
+        await bot.sendMessage(chatId, "You have no added accounts.");
       }
 
       await showMainMenu(chatId, "What would you like to do next?");
@@ -691,7 +691,7 @@ export const bot = new TelegramBot(token, { polling: true });
       console.error("Error viewing accounts:", error);
       await bot.sendMessage(
         chatId,
-        "❌ There was an error retrieving your accounts. Please try again."
+        "There was an error retrieving your accounts. Please try again."
       );
       showMainMenu(chatId);
     }
@@ -739,7 +739,7 @@ export const bot = new TelegramBot(token, { polling: true });
     if (!accountId) {
       await bot.sendMessage(
         chatId,
-        "❌ Invalid input. Please provide a valid account ID."
+        "Invalid input. Please provide a valid account ID."
       );
       return;
     }
@@ -749,7 +749,7 @@ export const bot = new TelegramBot(token, { polling: true });
 
       if (!user) {
         clearUserState(userId);
-        await bot.sendMessage(chatId, "❌ User not found. Please try again.");
+        await bot.sendMessage(chatId, "User not found. Please try again.");
         showMainMenu(chatId);
         return;
       }
@@ -762,7 +762,7 @@ export const bot = new TelegramBot(token, { polling: true });
       if (!account) {
         await bot.sendMessage(
           chatId,
-          "❌ Account not found or it doesn't belong to you. Please check the ID and try again."
+          "Account not found or it doesn't belong to you. Please check the ID and try again."
         );
         return;
       }
@@ -772,7 +772,7 @@ export const bot = new TelegramBot(token, { polling: true });
       clearUserState(userId);
       await bot.sendMessage(
         chatId,
-        `✅ Successfully removed account: ${account.email}`
+        `Successfully removed account: ${account.email}`
       );
       showMainMenu(chatId, "What would you like to do next?");
     } catch (error) {
@@ -780,7 +780,7 @@ export const bot = new TelegramBot(token, { polling: true });
       clearUserState(userId);
       await bot.sendMessage(
         chatId,
-        "❌ There was an error removing the account. Please try again."
+        "There was an error removing the account. Please try again."
       );
       showMainMenu(chatId);
     }
@@ -828,7 +828,7 @@ export const bot = new TelegramBot(token, { polling: true });
     if (!accountId) {
       await bot.sendMessage(
         chatId,
-        "❌ Invalid input. Please provide a valid account ID."
+        "Invalid input. Please provide a valid account ID."
       );
       return;
     }
@@ -838,7 +838,7 @@ export const bot = new TelegramBot(token, { polling: true });
 
       if (!user) {
         clearUserState(userId);
-        await bot.sendMessage(chatId, "❌ User not found. Please try again.");
+        await bot.sendMessage(chatId, "User not found. Please try again.");
         showMainMenu(chatId);
         return;
       }
@@ -851,7 +851,7 @@ export const bot = new TelegramBot(token, { polling: true });
       if (!account) {
         await bot.sendMessage(
           chatId,
-          "❌ Account not found or it doesn't belong to you. Please check the ID and try again."
+          "Account not found or it doesn't belong to you. Please check the ID and try again."
         );
         return;
       }
@@ -863,7 +863,7 @@ export const bot = new TelegramBot(token, { polling: true });
       clearUserState(userId);
       await bot.sendMessage(
         chatId,
-        `✅ Successfully ${statusText} the account: ${account.email}`
+        `Successfully ${statusText} the account: ${account.email}`
       );
       showMainMenu(chatId, "What would you like to do next?");
     } catch (error) {
@@ -871,7 +871,7 @@ export const bot = new TelegramBot(token, { polling: true });
       clearUserState(userId);
       await bot.sendMessage(
         chatId,
-        "❌ There was an error toggling the account status. Please try again."
+        "There was an error toggling the account status. Please try again."
       );
       showMainMenu(chatId);
     }
@@ -925,7 +925,7 @@ export const bot = new TelegramBot(token, { polling: true });
     if (parts.length < 3) {
       await bot.sendMessage(
         chatId,
-        "❌ Invalid format. Please use: YYYY-MM-DD HH:MM ScheduleName"
+        "Invalid format. Please use: YYYY-MM-DD HH:MM ScheduleName"
       );
       return;
     }
@@ -940,7 +940,7 @@ export const bot = new TelegramBot(token, { polling: true });
     if (!dateRegex.test(datePart)) {
       await bot.sendMessage(
         chatId,
-        "❌ Invalid date format. Please use YYYY-MM-DD (e.g., 2024-12-25)"
+        "Invalid date format. Please use YYYY-MM-DD (e.g., 2024-12-25)"
       );
       return;
     }
@@ -949,7 +949,7 @@ export const bot = new TelegramBot(token, { polling: true });
     if (!timeRegex.test(timePart)) {
       await bot.sendMessage(
         chatId,
-        "❌ Invalid time format. Please use HH:MM (e.g., 14:30)"
+        "Invalid time format. Please use HH:MM (e.g., 14:30)"
       );
       return;
     }
@@ -960,7 +960,7 @@ export const bot = new TelegramBot(token, { polling: true });
     if (!runAt.isValid) {
       await bot.sendMessage(
         chatId,
-        `❌ Invalid date/time: ${
+        `Invalid date/time: ${
           runAt.invalidExplanation || "Please check your input"
         }`
       );
@@ -970,7 +970,7 @@ export const bot = new TelegramBot(token, { polling: true });
     if (runAt.toJSDate() <= new Date()) {
       await bot.sendMessage(
         chatId,
-        "❌ Schedule time must be in the future. Please choose a later date/time."
+        "Schedule time must be in the future. Please choose a later date/time."
       );
       return;
     }
@@ -981,7 +981,7 @@ export const bot = new TelegramBot(token, { polling: true });
         clearUserState(userId);
         await bot.sendMessage(
           chatId,
-          "❌ User not found. Please start with /start command."
+          "User not found. Please start with /start command."
         );
         showMainMenu(chatId);
         return;
@@ -1000,7 +1000,7 @@ export const bot = new TelegramBot(token, { polling: true });
 
       await bot.sendMessage(
         chatId,
-        `✅ Schedule created successfully!\n\n` +
+        `Schedule created successfully!\n\n` +
           `📝 Name: ${scheduleName}\n` +
           `⏰ Scheduled for: ${displayTime}\n` +
           `🆔 ID: ${newSchedule._id}\n\n` +
@@ -1013,7 +1013,7 @@ export const bot = new TelegramBot(token, { polling: true });
       clearUserState(userId);
       await bot.sendMessage(
         chatId,
-        "❌ Failed to create schedule. Please try again."
+        "Failed to create schedule. Please try again."
       );
       showMainMenu(chatId);
     }
@@ -1040,7 +1040,7 @@ export const bot = new TelegramBot(token, { polling: true });
       if (!user) {
         await bot.sendMessage(
           chatId,
-          "❌ User not found. Please start with /start command."
+          "User not found. Please start with /start command."
         );
         showMainMenu(chatId);
         return;
@@ -1090,7 +1090,7 @@ export const bot = new TelegramBot(token, { polling: true });
       console.error("Error viewing schedules:", error);
       await bot.sendMessage(
         chatId,
-        "❌ Failed to retrieve schedules. Please try again."
+        "Failed to retrieve schedules. Please try again."
       );
       showMainMenu(chatId);
     }
@@ -1115,7 +1115,7 @@ export const bot = new TelegramBot(token, { polling: true });
       if (!user) {
         await bot.sendMessage(
           chatId,
-          "❌ User not found. Please start with /start command."
+          "User not found. Please start with /start command."
         );
         showMainMenu(chatId);
         return;
@@ -1162,7 +1162,7 @@ export const bot = new TelegramBot(token, { polling: true });
       console.error("Error starting remove schedule:", error);
       await bot.sendMessage(
         chatId,
-        "❌ Failed to load schedules. Please try again."
+        "Failed to load schedules. Please try again."
       );
       showMainMenu(chatId);
     }
@@ -1180,7 +1180,7 @@ export const bot = new TelegramBot(token, { polling: true });
     if (!scheduleId) {
       await bot.sendMessage(
         chatId,
-        "❌ Invalid input. Please provide a valid schedule ID."
+        "Invalid input. Please provide a valid schedule ID."
       );
       return;
     }
@@ -1189,7 +1189,7 @@ export const bot = new TelegramBot(token, { polling: true });
       const user = await User.findOne({ telegramId: userId });
       if (!user) {
         clearUserState(userId);
-        await bot.sendMessage(chatId, "❌ User not found. Please try again.");
+        await bot.sendMessage(chatId, "User not found. Please try again.");
         showMainMenu(chatId);
         return;
       }
@@ -1202,7 +1202,7 @@ export const bot = new TelegramBot(token, { polling: true });
       if (!schedule) {
         await bot.sendMessage(
           chatId,
-          "❌ Schedule not found or it doesn't belong to you. Please check the ID and try again."
+          "Schedule not found or it doesn't belong to you. Please check the ID and try again."
         );
         return;
       }
@@ -1212,7 +1212,7 @@ export const bot = new TelegramBot(token, { polling: true });
       clearUserState(userId);
       await bot.sendMessage(
         chatId,
-        `✅ Successfully removed schedule: "${schedule.name}"`
+        `Successfully removed schedule: "${schedule.name}"`
       );
       showMainMenu(chatId, "What would you like to do next?");
     } catch (error) {
@@ -1220,7 +1220,7 @@ export const bot = new TelegramBot(token, { polling: true });
       clearUserState(userId);
       await bot.sendMessage(
         chatId,
-        "❌ There was an error removing the schedule. Please try again."
+        "There was an error removing the schedule. Please try again."
       );
       showMainMenu(chatId);
     }
@@ -1237,7 +1237,7 @@ export const bot = new TelegramBot(token, { polling: true });
       if (!user) {
         await bot.sendMessage(
           chatId,
-          "❌ User not found. Please start with /start command."
+          "User not found. Please start with /start command."
         );
         return;
       }
@@ -1247,15 +1247,15 @@ export const bot = new TelegramBot(token, { polling: true });
       });
 
       if (result.deletedCount > 0) {
-        bot.sendMessage(chatId, "✅ Schedule deleted successfully.");
+        bot.sendMessage(chatId, "Schedule deleted successfully.");
       } else {
-        bot.sendMessage(chatId, "❌ Schedule not found or already completed.");
+        bot.sendMessage(chatId, "Schedule not found or already completed.");
       }
 
       showMainMenu(chatId);
     } catch (error) {
       console.error("Error deleting schedule:", error);
-      bot.sendMessage(chatId, "❌ Failed to delete schedule");
+      bot.sendMessage(chatId, "Failed to delete schedule");
     }
   };
 

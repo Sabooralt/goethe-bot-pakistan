@@ -12,14 +12,14 @@ export const submitDetailsForm = async (page: Page, acc: AccountDocument) => {
 
   await page.type('input[data-field-name="name"]', acc.firstName);
   await page.type('input[data-field-name="surname"]', acc.lastName);
-  console.log("✅ Filled out name and surname");
+  console.log("Filled out name and surname");
 
   const day = acc.details.dob.day;
   await page.select(
     'select[name="accountPanel:basicData:body:dateBirth:daySelector"]',
     String(day - 1)
   );
-  console.log("✅ Selected birth day");
+  console.log("Selected birth day");
 
   const month = acc.details.dob.month;
   const year = acc.details.dob.year;
@@ -33,7 +33,7 @@ export const submitDetailsForm = async (page: Page, acc: AccountDocument) => {
       monthSelect.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }, month - 1);
-  console.log("✅ Selected birth month (first time)");
+  console.log("Selected birth month (first time)");
 
   await page.evaluate((year) => {
     const yearValue = document.querySelector(
@@ -44,7 +44,7 @@ export const submitDetailsForm = async (page: Page, acc: AccountDocument) => {
       yearValue.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }, yearValue);
-  console.log("✅ Selected birth year (first time)");
+  console.log("Selected birth year (first time)");
 
   await delay(1000);
 
@@ -57,7 +57,7 @@ export const submitDetailsForm = async (page: Page, acc: AccountDocument) => {
       monthSelect.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }, month - 1);
-  console.log("✅ Selected birth month (second time)");
+  console.log("Selected birth month (second time)");
 
   await delay(1000);
   await page.evaluate((year) => {
@@ -69,10 +69,10 @@ export const submitDetailsForm = async (page: Page, acc: AccountDocument) => {
       yearValue.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }, yearValue);
-  console.log("✅ Selected birth year (second time)");
+  console.log("Selected birth year (second time)");
 
   await page.click("button.cs-button--arrow_next");
-  console.log('✅ Clicked "weiter" after DOB');
+  console.log('Clicked "weiter" after DOB');
 
   return;
 };
