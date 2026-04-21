@@ -4,3 +4,7 @@ node_modules/
 
 # Environment variables
 .env
+profile/
+./profile/
+Default/
+./Default/

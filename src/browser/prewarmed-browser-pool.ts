@@ -106,9 +106,6 @@ class PrewarmedBrowserPool {
                 executablePath: "/usr/bin/chromium-browser",
                 env: {
                     DISPLAY: display,
-                    CHROME_DEVEL_SANDBOX: "/usr/local/sbin/chrome-devel-sandbox",
-                    XAUTHORITY: process.env.XAUTHORITY || "/tmp/.docker.xauth",
-                    HOME: process.env.HOME || "/tmp",
                 },
                 args: browserArgs,
                 timeout: 30000,

@@ -9,7 +9,7 @@ interface AccountModules {
   speak: boolean;
 }
 
-let display = ":2"
+let display = ":1"
 const run = async () => {
   const browser = await puppeteer.launch({
     headless: false,
@@ -70,7 +70,7 @@ const run = async () => {
   const page = await browser.newPage();
 
   const url =
-    "https://saboor-five.vercel.app"; // Replace with your website
+    "https://www.goethe.de/ins/pk/en/spr/prf/gzb2.cfm"; // Replace with your website
 
   await page.goto(url, { waitUntil: "networkidle2" });
 
