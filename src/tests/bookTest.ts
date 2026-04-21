@@ -9,11 +9,10 @@ interface AccountModules {
   speak: boolean;
 }
 
-let display = ":1"
+let display = ":2"
 const run = async () => {
   const browser = await puppeteer.launch({
     headless: false,
-
     env: { DISPLAY: display },
     args: [
       // Performance optimizations
@@ -71,12 +70,13 @@ const run = async () => {
   const page = await browser.newPage();
 
   const url =
-    "https://goethe.de/coe?lang=en&oid=2faab28c6a9436d1f1ebaf00ea245afec7cc65c974a5444ee32fe5b202cd2b91"; // Replace with your website
+    "https://saboor-five.vercel.app"; // Replace with your website
 
   await page.goto(url, { waitUntil: "networkidle2" });
 
+  console.log("URL Reached!")
   // Example account modules
-  const accountModules: AccountModules = {
+ /*  const accountModules: AccountModules = {
     read: true,
     hear: true,
     write: true,
@@ -211,7 +211,7 @@ const run = async () => {
     await page.waitForNavigation({
       waitUntil: "networkidle2",
     });
-    
+
     if (bookingConflict) {
       await page.click("button.cs-button--arrow_next");
       await page.waitForNavigation({
@@ -227,7 +227,7 @@ const run = async () => {
       "⏳ You have approximately *10 minutes* to finish the payment before the session expires.\n\n";
   } catch (err) {
     console.log(err);
-  }
+  } */
 };
 
 run().catch(console.error);

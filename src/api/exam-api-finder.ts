@@ -1,27 +1,45 @@
 import puppeteer from "puppeteer";
 import axios from "axios";
-import { runAllAccounts } from "../cluster/runCluster";
+import http from "http";
+import https from "https";
 import dotenv from "dotenv";
 dotenv.config();
 
-const targetPageUrl =
-  process.env.TARGET_PAGE_URL ||
-  "https://www.goethe.de/ins/pk/en/spr/prf/gzb2.cfm";
+const TARGET_URL = process.env.TARGET_URL || "https://www.goethe.de/ins/pk/en/spr/prf/gzb2.cfm"
+
+
+
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  keepAliveMsecs: 30000,
+});
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  keepAliveMsecs: 30000,
+  rejectUnauthorized: false,
+});
+axios.defaults.httpAgent = httpAgent;
+axios.defaults.httpsAgent = httpsAgent;
 
 interface ExamModule {
   date: string;
   startTime: string;
 }
 
-interface ExamData {
-  oid?: string;
-  modules?: ExamModule[];
-  bookFromStamp?: string;
+export interface ExamData {
+  oid?: string; 
+  moduleId?: string;
+  bookFrom?: string; 
+  bookFromTime?: string; 
+  bookFromTimeFormatted?: string;
+  bookFromStamp?: string; 
   bookToStamp?: string;
-  bookFrom?: string;
-  bookTo?: string;
+  startDate?: string; 
   eventName?: string;
-  locationName?: string; 
+  locationName?: string;
+  modules?: ExamModule[];
   [key: string]: any;
 }
 
@@ -40,26 +58,47 @@ interface PollingOptions {
   priorityLocations?: string[];
 }
 
-class ExamApiMonitor {
-  private apiUrl: string | null = null;
-  private pollInterval: NodeJS.Timeout | null = null;
+interface LockedExam {
+  locationName: string;
+  startDate: string;
+  moduleId: string;
+  bookFrom: string;
+  bookFromTime: string;
+  pageNumber: number;
+}
+
+class ExamMonitor {
+  private apiUrl: string | null =
+    process.env.TEST_MODE === "true"
+      ? "http://localhost:3001/api/mock-exam"
+      : null;
   private timeoutInterval: NodeJS.Timeout | null = null;
   private isPolling = false;
   private shouldStopPolling = false;
   private processingOid = false;
   private processedOids = new Set<string>();
+  private consecutiveErrors = 0;
+  private maxConsecutiveErrors = 5;
+  private lastSuccessfulPoll: Date | null = null;
+  private rapidOidHandler: ((exam: ExamData) => Promise<void>) | null = null;
 
-  /**
-   * Captures the exam API URL using Puppeteer with retry logic
-   */
+  // Smart page tracking for optimized polling
+  private lockedExam: LockedExam | null = null;
+  private lastPageChecked = 0;
+  private emptyPageStreak = 0;
+  private maxPagesToCheck = 5;
+
+  // Performance metrics
+  private pollCount = 0;
+  private startTime: Date | null = null;
+  private lastApiCallDuration = 0;
+
   async captureApiUrl(
-    maxRetries = 20,
-    retryDelay = 10000
+    maxRetries = 30,
+    retryDelay = 5000
   ): Promise<string | null> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      console.log(
-        `🔍 Attempt ${attempt}/${maxRetries}: Launching browser to capture API URL...`
-      );
+      console.log(`🔍 Attempt ${attempt}/${maxRetries}: Capturing API URL...`);
 
       let browser = null;
       try {
@@ -71,58 +110,46 @@ class ExamApiMonitor {
             "--disable-dev-shm-usage",
             "--disable-gpu",
             "--disable-blink-features=AutomationControlled",
-            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           ],
+          timeout: 30000,
         });
 
         const page = await browser.newPage();
-
-        // Better user agent and viewport
         await page.setUserAgent(
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         );
         await page.setViewport({ width: 1920, height: 1080 });
 
         const apiUrl = await new Promise<string | null>(async (resolve) => {
-          let apiUrlCaptured = false;
+          let captured = false;
           const timeoutId = setTimeout(() => {
-            if (!apiUrlCaptured) {
-              console.log(
-                `⏱️ Timeout waiting for API URL on attempt ${attempt}`
-              );
-              resolve(null);
-            }
-          }, 20000);
+            if (!captured) resolve(null);
+          }, 25000);
 
-          // Set up response interceptor
-          page.on("response", async (response) => {
-            if (apiUrlCaptured) return;
-
+          page.on("response", (response) => {
             const url = response.url();
-            if (url.includes("examfinder")) {
-              console.log("Captured API URL:", url);
-              this.apiUrl = url;
-              apiUrlCaptured = true;
+            if (!captured && url.includes("examfinder")) {
+              captured = true;
               clearTimeout(timeoutId);
+              console.log("✅ Captured API URL:", url);
               resolve(url);
             }
           });
 
           try {
-            await page.goto(targetPageUrl, {
-              waitUntil: "networkidle2",
-              timeout: 25000,
-            });
-
-            // Additional wait to ensure all requests are captured
-            await new Promise((resolve) => setTimeout(resolve, 5000));
-
-            if (!apiUrlCaptured) {
-              clearTimeout(timeoutId);
-              resolve(null);
-            }
+            await page.goto(
+            TARGET_URL,
+              {
+                waitUntil: "networkidle0",
+                timeout: 20000,
+              }
+            );
           } catch (error) {
-            console.error(`Navigation error on attempt ${attempt}:`, error);
+            console.log("Navigation error, but may have captured URL");
+          }
+
+          await new Promise((r) => setTimeout(r, 3000));
+          if (!captured) {
             clearTimeout(timeoutId);
             resolve(null);
           }
@@ -131,34 +158,86 @@ class ExamApiMonitor {
         await browser.close();
 
         if (apiUrl) {
-          console.log(`Successfully captured API URL on attempt ${attempt}`);
+          console.log(`✅ API URL captured successfully on attempt ${attempt}`);
+          this.apiUrl = apiUrl;
+          this.consecutiveErrors = 0;
           return apiUrl;
         }
       } catch (error) {
-        console.error(`Browser error on attempt ${attempt}:`, error);
+        console.error(`❌ Browser error on attempt ${attempt}:`, error);
         if (browser) {
-          try {
-            await browser.close();
-          } catch (e) {
-            console.error("Error closing browser:", e);
-          }
+          await browser.close().catch(() => { });
         }
       }
 
-      // Wait before retrying
       if (attempt < maxRetries) {
-        console.log(`Waiting ${retryDelay}ms before next attempt...`);
-        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        const waitTime = Math.min(retryDelay * Math.sqrt(attempt), 15000);
+        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+        await new Promise((r) => setTimeout(r, waitTime));
       }
     }
 
-    console.error(`Failed to capture API URL after ${maxRetries} attempts`);
+    console.error(`❌ Failed to capture API URL after ${maxRetries} attempts`);
     return null;
   }
 
-  /**
-   * Prioritize exams based on location preferences
-   */
+  private async directApiCall(
+    pageNum: number = 1
+  ): Promise<ApiResponse | null> {
+    if (!this.apiUrl) return null;
+
+    const startTime = Date.now();
+    try {
+      const url = new URL(this.apiUrl);
+
+      if (pageNum > 1) {
+        const pageSize = 10;
+        const startValue = (pageNum - 1) * pageSize + 1;
+        url.searchParams.set("page", pageNum.toString());
+        url.searchParams.set("start", startValue.toString());
+      }
+
+      const response = await axios.get(url.toString(), {
+        timeout: 5000,
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Accept: "application/json",
+          "Cache-Control": "no-cache",
+        },
+        validateStatus: (status) => status === 200,
+      });
+
+      this.lastApiCallDuration = Date.now() - startTime;
+      this.consecutiveErrors = 0;
+      this.lastSuccessfulPoll = new Date();
+
+      return response.data;
+    } catch (error) {
+      this.lastApiCallDuration = Date.now() - startTime;
+      this.consecutiveErrors++;
+      return null;
+    }
+  }
+
+  private async checkAndRecaptureApiUrl(): Promise<boolean> {
+    if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
+      console.warn(
+        `⚠️ ${this.consecutiveErrors} consecutive errors → recapturing API URL...`
+      );
+      this.apiUrl = null;
+      const newUrl = await this.captureApiUrl(5, 3000);
+
+      if (newUrl) {
+        console.log("✅ Successfully recaptured API URL");
+        this.consecutiveErrors = 0;
+        return true;
+      }
+      console.error("❌ Failed to recapture API URL");
+      return false;
+    }
+    return true;
+  }
+
   private prioritizeExams(
     exams: ExamData[],
     priorityLocations: string[]
@@ -167,12 +246,10 @@ class ExamApiMonitor {
       return exams;
     }
 
-    // Sort exams by priority location
     return exams.sort((a, b) => {
       const aLocation = a.locationName?.toLowerCase() || "";
       const bLocation = b.locationName?.toLowerCase() || "";
 
-      // Check priority for each exam
       let aPriority = -1;
       let bPriority = -1;
 
@@ -186,293 +263,302 @@ class ExamApiMonitor {
         }
       });
 
-      // If both have priority, sort by priority order
       if (aPriority !== -1 && bPriority !== -1) {
         return aPriority - bPriority;
       }
 
-      // Priority locations come first
       if (aPriority !== -1) return -1;
       if (bPriority !== -1) return 1;
 
-      // No priority difference
       return 0;
     });
   }
 
-  /**
-   * Starts polling the API for exams at specified date/time
-   */
   async startPolling(targetDate: Date, options: PollingOptions = {}) {
     const {
-      interval = 5000,
+      interval = 1000,
       onExamFound,
       onExamWithOid,
       onTimeout,
       stopOnFirstOid = true,
-      maxDurationMs = 5 * 60 * 60 * 1000,
-      priorityLocations = ["karachi", "islamabad", "bangalore"],
+      maxDurationMs = 30 * 60 * 1000,
+      priorityLocations = ["karachi", "islamabad",],
     } = options;
 
-    // Reset flags
+    this.rapidOidHandler = onExamWithOid || null;
     this.shouldStopPolling = false;
     this.processingOid = false;
     this.processedOids.clear();
+    this.consecutiveErrors = 0;
+    this.lockedExam = null;
+    this.pollCount = 0;
+    this.startTime = new Date();
+    this.lastPageChecked = 0;
+    this.emptyPageStreak = 0;
 
-    // Ensure we have the API URL
     if (!this.apiUrl) {
-      console.log("📡 API URL not available, capturing it first...");
+      console.log("Capturing API URL...");
       await this.captureApiUrl();
 
       if (!this.apiUrl) {
-        console.error("Could not capture API URL, aborting polling");
+        console.error("❌ Could not capture API URL");
+        if (onTimeout) await onTimeout();
         return;
       }
     }
 
-    if (this.isPolling) {
-      console.log("⚠️ Already polling, stopping previous poll first");
-      this.stopPolling();
-      // Wait for previous polling to fully stop
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
+    // Convert UTC time to IST (Indian Standard Time = UTC+5:30)
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes in milliseconds
+    const targetDateIST = new Date(targetDate.getTime() + IST_OFFSET_MS);
 
-    const targetDateStr = targetDate.toISOString().split("T")[0];
-    const targetTimeStr = targetDate.toTimeString().split(" ")[0];
+    // Format for matching with API (which uses PST)
+    const targetDateStr = targetDateIST.toISOString().split("T")[0];
+    const targetTimeStr = targetDateIST
+      .toISOString()
+      .split("T")[1]
+      .substring(0, 5);
 
+    const [year, month, day] = targetDateStr.split("-");
+    const targetBookFromDate = `${day}.${month}.${year}`; 
+    const targetBookFromTime = `${targetTimeStr}:00.000`; 
+
+    console.log(`🚀 Starting ULTRA-FAST polling mode`);
+    console.log(`🎯 Target (UTC): ${targetDate.toISOString()}`);
+    console.log(`🎯 Target (PST): ${targetDateIST.toISOString()}`);
+    console.log(`🔍 Looking for exam with:`);
+    console.log(`   - bookFrom: ${targetBookFromDate}`);
+    console.log(`   - bookFromTime: ${targetBookFromTime} (IST)`);
     console.log(
-      `📡 Starting to poll API every ${
-        interval / 1000
-      }s for exams with booking opening at ${targetDateStr} at ${targetTimeStr}`
-    );
-    console.log(
-      `⏰ Maximum polling duration: ${maxDurationMs / 60000} minutes`
+      `⚡ Interval: ${interval}ms (${1000 / interval} checks/second)`
     );
     console.log(`📍 Priority locations: ${priorityLocations.join(", ")}`);
-    console.log(`🔗 Using API URL: ${this.apiUrl}`);
+    console.log(` Timezone: PST (UTC+5:00)\n`);
 
     this.isPolling = true;
 
-    // Set timeout to stop polling after maxDurationMs
+    // Set timeout for max duration
     this.timeoutInterval = setTimeout(async () => {
-      console.log(
-        `⏰ Reached max duration of ${
-          maxDurationMs / 60000
-        } minutes - stopping poll`
-      );
-
+      console.log(`⏰ Max duration reached (${maxDurationMs}ms)`);
       this.shouldStopPolling = true;
-
-      if (onTimeout) {
-        try {
-          await onTimeout();
-        } catch (error) {
-          console.error("Error in timeout callback:", error);
-        }
-      }
-
+      if (onTimeout) await onTimeout();
       this.stopPolling();
     }, maxDurationMs);
 
-    // Main polling loop
-    this.pollInterval = setInterval(async () => {
-      // Check if we should stop polling
+    // Ultra-fast polling loop
+    const rapidPoll = async () => {
       if (this.shouldStopPolling) {
-        console.log("🛑 Polling stop requested, clearing interval");
         this.stopPolling();
         return;
       }
 
-      // Skip this iteration if we're processing an OID
+      // Skip this iteration if still processing an OID
       if (this.processingOid) {
-        console.log(
-          "⏳ Still processing previous OID, skipping this poll iteration"
-        );
+        setImmediate(() => setTimeout(rapidPoll, interval));
+        return;
+      }
+
+      // Check if we need to recapture API URL
+      const canContinue = await this.checkAndRecaptureApiUrl();
+      if (!canContinue) {
+        this.stopPolling();
+        if (onTimeout) await onTimeout();
         return;
       }
 
       try {
-        const response = await axios.get(this.apiUrl!, {
-          timeout: 10000,
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            Accept: "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Cache-Control": "no-cache",
-          },
-        });
+        this.pollCount++;
 
-        const data: ApiResponse = response.data;
+        // STAGE 1: If we've locked onto an exam, only check that page
+        if (this.lockedExam) {
+          const data = await this.directApiCall(this.lockedExam.pageNumber);
 
-        if (!data.DATA || !Array.isArray(data.DATA)) {
-          console.warn("⚠️ Unexpected API response format");
-          return;
-        }
-
-        // Find matching exams by checking when booking opens
-        let matchingExams = data.DATA.filter((exam: ExamData) => {
-          if (!exam.bookFromStamp) {
-            return false;
-          }
-
-          const bookFromDate = new Date(exam.bookFromStamp);
-          const bookFromDateStr = bookFromDate.toISOString().split("T")[0];
-          const bookFromTimeStr = bookFromDate.toTimeString().split(" ")[0];
-
-          const dateMatches = bookFromDateStr === targetDateStr;
-          const timeMatches =
-            bookFromTimeStr.substring(0, 5) === targetTimeStr.substring(0, 5);
-
-          return dateMatches && timeMatches;
-        });
-
-        if (matchingExams.length > 0) {
-          // Prioritize exams based on location
-          matchingExams = this.prioritizeExams(
-            matchingExams,
-            priorityLocations
-          );
-
-          const firstExam = matchingExams[0];
-          console.log(`Found ${matchingExams.length} matching exam(s)`);
-
-          if (matchingExams.length > 1) {
-            console.log(`🎯 Multiple exams found. Processing by priority:`);
-            matchingExams.forEach((exam, index) => {
-              console.log(
-                `  ${index + 1}. ${exam.eventName || "Unknown"} at ${
-                  exam.locationName || "Unknown Location"
-                } ${
-                  exam.oid
-                    ? `(OID: ${exam.oid.substring(0, 8)}...)`
-                    : "(No OID yet)"
-                }`
-              );
-            });
-          }
-
-          // Log exam details
-          if (firstExam.bookFromStamp && firstExam.bookToStamp) {
-            const bookFrom = new Date(firstExam.bookFromStamp);
-            const bookTo = new Date(firstExam.bookToStamp);
-            console.log(
-              `📅 Booking window: ${bookFrom.toLocaleString()} → ${bookTo.toLocaleString()}`
+          if (data?.DATA && Array.isArray(data.DATA)) {
+            // Find our specific locked exam
+            const lockedExam = data.DATA.find(
+              (exam: ExamData) =>
+                exam.locationName === this.lockedExam!.locationName &&
+                exam.startDate === this.lockedExam!.startDate &&
+                exam.moduleId === this.lockedExam!.moduleId
             );
-          }
 
-          // Process exams in priority order
-          for (const exam of matchingExams) {
-            // Skip if already processed this OID
-            if (exam.oid && this.processedOids.has(exam.oid)) {
-              console.log(
-                `⏭️ Skipping already processed OID: ${exam.oid.substring(
-                  0,
-                  8
-                )}...`
-              );
-              continue;
-            }
+            if (lockedExam) {
+              // Check if OID appeared
+              if (lockedExam.oid && !this.processedOids.has(lockedExam.oid)) {
+                const elapsed = this.startTime
+                  ? Date.now() - this.startTime.getTime()
+                  : 0;
+                console.log(`\ OID DETECTED IN ${elapsed}ms`);
+                console.log(`🎯 OID: ${lockedExam.oid}`);
+                console.log(
+                  `📍 Location: ${lockedExam.locationName || "Unknown"}`
+                );
+                console.log(`📄 Page: ${this.lockedExam.pageNumber}`);
+                console.log(`📊 Poll count: ${this.pollCount}`);
 
-            // Call the general exam found callback
-            if (onExamFound) {
-              try {
-                await onExamFound(exam);
-              } catch (error) {
-                console.error("Error in onExamFound callback:", error);
-              }
-            }
+                this.processedOids.add(lockedExam.oid);
+                this.processingOid = true;
 
-            if (exam.oid) {
-              console.log(
-                `🎯 Exam with OID found: ${exam.oid} (${
-                  exam.eventName || "Unknown"
-                }) at ${exam.locationName || "Unknown Location"}`
-              );
-
-              // Mark as processed
-              this.processedOids.add(exam.oid);
-
-              if (onExamWithOid) {
-                try {
-                  // Set processing flag BEFORE calling the callback
-                  this.processingOid = true;
-
-                  if (stopOnFirstOid) {
-                    // Mark for stopping BEFORE processing
-                    this.shouldStopPolling = true;
-                    console.log(
-                      "🛑 Marking polling for stop (found exam with OID)"
-                    );
-                  }
-
-                  // Process the exam
-                  await onExamWithOid(exam);
-
-                  // Clear processing flag after completion
-                  this.processingOid = false;
-
-                  if (stopOnFirstOid) {
-                    // Stop polling after processing
-                    this.stopPolling();
-                    return;
-                  }
-                } catch (error) {
-                  console.error("Error in onExamWithOid callback:", error);
-                  this.processingOid = false;
+                // Pass exam with oid
+                if (this.rapidOidHandler) {
+                  setImmediate(() => {
+                    this.rapidOidHandler!(lockedExam).finally(() => {
+                      this.processingOid = false;
+                    });
+                  });
                 }
-              }
 
-              if (stopOnFirstOid && !onExamWithOid) {
-                this.shouldStopPolling = true;
-                this.stopPolling();
-                return;
+                if (stopOnFirstOid) {
+                  this.shouldStopPolling = true;
+                  this.stopPolling();
+                  return;
+                }
+              } else if (!lockedExam.oid) {
+                // Show brief status every 10 polls
+                if (this.pollCount % 10 === 0) {
+                  console.log(
+                    `⏳ Locked exam on page ${this.lockedExam.pageNumber} - waiting for OID... (${this.pollCount} polls)`
+                  );
+                }
               }
             } else {
               console.log(
-                `⏳ Exam found (${exam.eventName || "Unknown"}) at ${
-                  exam.locationName || "Unknown Location"
-                } but no OID yet, continuing to poll...`
+                `⚠️ Locked exam disappeared from page ${this.lockedExam.pageNumber}, resuming full scan`
+              );
+              this.lockedExam = null;
+            }
+          }
+        }
+        // STAGE 2: Full page scan to FIND and LOCK the exam
+        else {
+          let foundExam = false;
+          let pagesToCheck = Math.min(this.maxPagesToCheck, 5);
+
+          // Reduce pages to check if we've had empty streaks
+          if (this.emptyPageStreak > 3) {
+            pagesToCheck = 2;
+          }
+
+          for (let page = 1; page <= pagesToCheck; page++) {
+            const data = await this.directApiCall(page);
+
+            if (!data?.DATA || !Array.isArray(data.DATA)) {
+              break;
+            }
+
+            if (data.DATA.length === 0) {
+              this.emptyPageStreak++;
+              break;
+            }
+
+            this.emptyPageStreak = 0;
+
+            // Find exams matching bookFrom and bookFromTime
+            const matchingExams = data.DATA.filter((exam: ExamData) => {
+              return (
+                exam.bookFrom === targetBookFromDate &&
+                exam.bookFromTime === targetBookFromTime
+              );
+            });
+
+            if (matchingExams.length > 0) {
+              foundExam = true;
+              const prioritizedExams = this.prioritizeExams(
+                matchingExams,
+                priorityLocations
+              );
+              const exam = prioritizedExams[0];
+
+              // LOCK ONTO THIS EXAM
+              this.lockedExam = {
+                locationName: exam.locationName || "",
+                startDate: exam.startDate || "",
+                moduleId: exam.moduleId || "",
+                bookFrom: exam.bookFrom || "",
+                bookFromTime: exam.bookFromTime || "",
+                pageNumber: page,
+              };
+
+              console.log(`\nEXAM LOCKED!`);
+              console.log(`   📍 Location: ${exam.locationName}`);
+              console.log(`   📅 Exam Date: ${exam.startDate}`);
+              console.log(`   🆔 Module ID: ${exam.moduleId}`);
+              console.log(`   📄 Page: ${page}`);
+              console.log(
+                `  Booking opens: ${exam.bookFrom} ${exam.bookFromTimeFormatted || exam.bookFromTime
+                }`
+              );
+              console.log(`   🔍 Now monitoring for OID...`);
+
+              if (onExamFound) {
+                setImmediate(() => onExamFound(exam));
+              }
+
+              // Check immediately if OID already exists
+              if (exam.oid && !this.processedOids.has(exam.oid)) {
+                const elapsed = this.startTime
+                  ? Date.now() - this.startTime.getTime()
+                  : 0;
+                console.log(
+                  `\nOID ALREADY PRESENT! ${elapsed}ms `
+                );
+                console.log(`🎯 OID: ${exam.oid}`);
+
+                this.processedOids.add(exam.oid);
+                this.processingOid = true;
+
+                if (this.rapidOidHandler) {
+                  setImmediate(() => {
+                    this.rapidOidHandler!(exam).finally(() => {
+                      this.processingOid = false;
+                    });
+                  });
+                }
+
+                if (stopOnFirstOid) {
+                  this.shouldStopPolling = true;
+                  this.stopPolling();
+                  return;
+                }
+              }
+
+              break; // Stop checking other pages
+            }
+          }
+
+          if (!foundExam) {
+            // Show status every 10 polls when no exam found
+            if (this.pollCount % 10 === 0) {
+              const elapsed = this.startTime
+                ? Date.now() - this.startTime.getTime()
+                : 0;
+              const rate =
+                elapsed > 0 ? Math.round(this.pollCount / (elapsed / 1000)) : 0;
+              console.log(
+                `⏳ [${new Date().toLocaleTimeString()}] Scanning for exam... | Polls: ${this.pollCount
+                } | Rate: ${rate}/s | Pages: ${pagesToCheck}`
               );
             }
           }
-        } else {
-          const now = new Date().toLocaleTimeString();
-          console.log(
-            `⌛ [${now}] No matching exams with booking opening at ${targetDateStr} ${targetTimeStr}`
-          );
         }
-      } catch (error: any) {
-        console.error("Error polling API:", error.message);
 
-        // If it's a network error, try to recapture the API URL
-        if (
-          axios.isAxiosError(error) &&
-          (error.code === "ECONNREFUSED" || error.response?.status === 404)
-        ) {
-          console.log(
-            "🔄 Network error detected, attempting to recapture API URL..."
-          );
-          this.apiUrl = null;
-          const newUrl = await this.captureApiUrl(3, 5000); // Fewer retries for network errors
-          if (!newUrl) {
-            console.error("Failed to recapture API URL, stopping polling");
-            this.stopPolling();
-          }
+        // Log performance warning if API calls are slow
+        if (this.lastApiCallDuration > 1000) {
+          console.warn(`⚠️ Slow API call: ${this.lastApiCallDuration}ms`);
         }
+      } catch (error) {
+        console.error("❌ Poll error:", error);
+        this.consecutiveErrors++;
       }
-    }, interval);
+
+      // Schedule next poll
+      setImmediate(() => setTimeout(rapidPoll, interval));
+    };
+
+    // Start polling immediately
+    setImmediate(rapidPoll);
   }
 
-  /**
-   * Stops the current polling operation
-   */
   stopPolling() {
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
-    }
-
     if (this.timeoutInterval) {
       clearTimeout(this.timeoutInterval);
       this.timeoutInterval = null;
@@ -481,107 +567,69 @@ class ExamApiMonitor {
     if (this.isPolling) {
       this.isPolling = false;
       this.shouldStopPolling = true;
-      console.log("🛑 Polling stopped");
+
+      const elapsed = this.startTime
+        ? Date.now() - this.startTime.getTime()
+        : 0;
+      console.log("\n🛑 Polling stopped");
+      console.log(`📊 Statistics:`);
+      console.log(`   - Total polls: ${this.pollCount}`);
+      console.log(`   - Duration: ${elapsed}ms`);
+      console.log(
+        `   - Average rate: ${Math.round(
+          this.pollCount / (elapsed / 1000)
+        )} polls/second`
+      );
+      console.log(`   - Processed OIDs: ${this.processedOids.size}`);
     }
   }
 
-  /**
-   * Force stops polling and waits for any processing to complete
-   */
-  async forceStopPolling(maxWaitMs = 10000): Promise<void> {
+  async forceStopPolling(maxWaitMs = 5000): Promise<void> {
     this.shouldStopPolling = true;
     this.stopPolling();
 
     const startTime = Date.now();
     while (this.processingOid && Date.now() - startTime < maxWaitMs) {
-      console.log("⏳ Waiting for OID processing to complete...");
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-
-    if (this.processingOid) {
-      console.warn("⚠️ Force stop timeout - processing may still be running");
+      console.log("Waiting for OID processing to complete...");
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
 
-  /**
-   * Gets the current API URL without launching browser
-   */
   getApiUrl(): string | null {
     return this.apiUrl;
   }
 
-  /**
-   * Forces recapture of API URL with retry logic
-   */
-  async refreshApiUrl(
-    maxRetries = 5,
-    retryDelay = 3000
-  ): Promise<string | null> {
-    this.apiUrl = null;
-    return await this.captureApiUrl(maxRetries, retryDelay);
-  }
+  getStatus(): any {
+    const elapsed = this.startTime ? Date.now() - this.startTime.getTime() : 0;
+    const rate =
+      elapsed > 0 ? Math.round(this.pollCount / (elapsed / 1000)) : 0;
 
-  /**
-   * Get current polling status
-   */
-  getStatus(): {
-    isPolling: boolean;
-    hasApiUrl: boolean;
-    apiUrl: string | null;
-    processingOid: boolean;
-    processedOids: string[];
-  } {
     return {
       isPolling: this.isPolling,
       hasApiUrl: !!this.apiUrl,
       apiUrl: this.apiUrl,
       processingOid: this.processingOid,
       processedOids: Array.from(this.processedOids),
+      consecutiveErrors: this.consecutiveErrors,
+      lastSuccessfulPoll: this.lastSuccessfulPoll,
+      lockedExam: this.lockedExam,
+      pollCount: this.pollCount,
+      pollRate: `${rate} polls/second`,
+      uptime: `${elapsed}ms`,
+      lastApiCallDuration: `${this.lastApiCallDuration}ms`,
     };
   }
 
-  /**
-   * Cleanup method
-   */
   async destroy() {
     await this.forceStopPolling();
     this.apiUrl = null;
     this.processedOids.clear();
+    this.consecutiveErrors = 0;
+    this.lockedExam = null;
+    this.pollCount = 0;
+    this.startTime = null;
   }
 }
 
-// Export singleton instance
-export const examMonitor = new ExamApiMonitor();
-
-// Export class for testing or multiple instances
-export { ExamApiMonitor };
-
-// Updated legacy function with location priority
-export async function pollExamApi(
-  runAt: Date,
-  interval = 5000,
-  priorityLocations: string[] = ["new delhi", "bengal", "bangalore"]
-) {
-  await examMonitor.startPolling(runAt, {
-    interval,
-    stopOnFirstOid: true,
-    maxDurationMs: 30 * 60 * 1000,
-    priorityLocations,
-    onExamWithOid: async (exam) => {
-      console.log(`🎯 Ready to process exam with OID: ${exam.oid}`);
-      console.log(`📍 Location: ${exam.locationName || "Unknown"}`);
-
-      try {
-        // Call runAllAccounts and wait for it to complete
-        await runAllAccounts(exam.oid!);
-        console.log(`Finished processing OID: ${exam.oid}`);
-      } catch (error) {
-        console.error(`Error processing OID ${exam.oid}:`, error);
-        throw error; // Re-throw to be handled by the monitor
-      }
-    },
-    onTimeout: () => {
-      console.log("⏰ Polling timeout - no exam found within 30 minutes");
-    },
-  });
-}
+export const examMonitor = new ExamMonitor();
+export { ExamMonitor };

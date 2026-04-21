@@ -1,10 +1,6 @@
 import { Page } from "puppeteer";
 import dotenv from "dotenv";
 import type TelegramBot from "node-telegram-bot-api";
-import { handleBookingConflict } from "../fillers/handleBookingConflict";
-import { AccountDocument } from "../models/accountSchema";
-import { UserDocument } from "../models/userSchema";
-import { selectAvailableModules } from "../fillers/selectAllModules";
 
 dotenv.config();
 
@@ -17,252 +13,399 @@ interface DisplayInfo {
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const sendAccountLog = (
+const sendLog = (
   bot: TelegramBot,
-  chatId: string,
-  account: AccountDocument,
+  chatId: string | null,
+  browserNumber: number,
   message: string
 ) => {
-  const accountInfo = `[${account.email}]`;
-  const fullMessage = `${accountInfo} ${message}`;
+  if (!chatId) return;
 
+  const fullMessage = `[Browser ${browserNumber}] ${message}`;
+
+  // Fire and forget - don't block on telegram messages
+  setImmediate(() => {
+    try {
+      bot.sendMessage(chatId, fullMessage, { parse_mode: "Markdown" });
+    } catch (error) {
+      console.error("Failed to send Telegram message:", error);
+    }
+  });
+};
+
+/**
+ * Calculate exponential backoff delay
+ */
+const getBackoffDelay = (
+  attempt: number,
+  baseDelay: number = 5000,
+  maxDelay: number = 300000
+): number => {
+  // Exponential: 5s, 10s, 20s, 40s, 80s, 160s, 300s (capped at 5min)
+  const exponentialDelay = baseDelay * Math.pow(2, Math.min(attempt - 1, 6));
+  return Math.min(exponentialDelay, maxDelay);
+};
+
+/**
+ * Check if page has rate limit error (429)
+ */
+const isRateLimited = async (page: Page): Promise<boolean> => {
   try {
-    bot.sendMessage(chatId, fullMessage, { parse_mode: "Markdown" });
-    console.log(fullMessage);
+    const content = await page.content();
+    const title = (await page.title()).toLowerCase();
+
+    // Check for 429 indicators
+    return (
+      content.includes("429") ||
+      content.includes("too many requests") ||
+      content.includes("rate limit") ||
+      title.includes("429") ||
+      title.includes("too many requests")
+    );
   } catch (error) {
-    console.error("Failed to send Telegram message:", error);
+    return false;
   }
 };
 
-const startBooking = async (
-  page: Page,
-  acc: AccountDocument,
-  oid: string,
-  bot: TelegramBot,
-  displayInfo?: DisplayInfo,
-  timeoutMs = 5 * 60 * 60 * 1000
-) => {
-  const chatId = (acc.user as UserDocument).telegramId;
-  const startTime = Date.now();
-
-  await page.evaluateOnNewDocument(() => {
-    localStorage.setItem(
-      "uc_gcm",
-      JSON.stringify({
-        adsDataRedaction: true,
-        adPersonalization: "denied",
-        adStorage: "denied",
-        adUserData: "denied",
-        analyticsStorage: "denied",
-      })
-    );
-
-    localStorage.setItem("uc_ui_version", "3.73.0");
-    localStorage.setItem("uc_user_interaction", "true");
-
-    localStorage.setItem(
-      "uc_settings",
-      JSON.stringify({
-        controllerId:
-          "42e213448633d19d017343f77368ef4ab462b0ca1fb10607c313393260b08f21",
-        id: "rTbKQ4Qc-",
-        services: [],
-      })
-    );
-  });
-
-  while (true) {
-    const elapsed = Date.now() - startTime;
-    if (elapsed > timeoutMs) {
-      sendAccountLog(
-        bot,
-        chatId,
-        acc,
-        "⏰ Booking retry timeout reached (5 hours). Stopping booking."
-      );
-      return;
-    }
-
-    await page.goto(`https://www.goethe.de/coe?lang=en&oid=${oid}`, {
-      waitUntil: "domcontentloaded",
-    });
-
+/**
+ * Check if booking page loaded successfully
+ */
+const isBookingPageLoaded = async (page: Page): Promise<boolean> => {
+  try {
     const pageTitle = (await page.title()).toLowerCase();
-    if (
-      pageTitle.includes("error") ||
-      pageTitle.includes("unterbrechung") ||
-      /http\s?\d{3}/i.test(pageTitle)
-    ) {
-      console.error(`Booking error detected, retrying... (elapsed ${Math.round(elapsed / 60000)} min)`);
+    return pageTitle.includes("options");
+  } catch (error) {
+    return false;
+  }
+};
 
-      sendAccountLog(
-        bot,
-        chatId,
-        acc,
-        `Booking error detected, retrying...\nElapsed: ${Math.round(elapsed / 60000)} minutes`
+/**
+ * Navigate to URL with 5 second timeout - refresh if it takes longer
+ */
+const navigateWithTimeout = async (
+  page: Page,
+  url: string,
+  browserNumber: number,
+  maxAttempts = 3
+): Promise<{ success: boolean; rateLimited: boolean }> => {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(
+        `🔄 Browser ${browserNumber}: Navigation attempt ${attempt}/${maxAttempts}...`
       );
 
-      await delay(5000);
-      continue;
-    }
+      // Try to load with 5 second timeout
+      await page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: 5000, // 5 seconds
+      });
 
-    // Success – break retry loop
-    break;
+      // Check for rate limiting
+      const rateLimited = await isRateLimited(page);
+      if (rateLimited) {
+        console.log(`🚫 Browser ${browserNumber}: Rate limited (429) detected`);
+        return { success: false, rateLimited: true };
+      }
+
+      console.log(`✅ Browser ${browserNumber}: Page loaded within 5 seconds`);
+      return { success: true, rateLimited: false }; // Success!
+    } catch (error) {
+      const err = error as Error;
+
+      if (
+        err.message.includes("timeout") ||
+        err.message.includes("Navigation timeout")
+      ) {
+        console.log(
+          `⏰ Browser ${browserNumber}: Page took >5s to load (attempt ${attempt}/${maxAttempts}), refreshing...`
+        );
+
+        // If not the last attempt, continue to next iteration (refresh)
+        if (attempt < maxAttempts) {
+          await delay(500); // Small delay before retry
+          continue;
+        } else {
+          console.log(
+            `⚠️ Browser ${browserNumber}: All ${maxAttempts} attempts timed out, continuing anyway...`
+          );
+          return { success: false, rateLimited: false }; // Failed all attempts but continue
+        }
+      } else {
+        // Other errors (not timeout) - log and continue
+        console.error(
+          `❌ Browser ${browserNumber}: Navigation error: ${err.message}`
+        );
+        return { success: false, rateLimited: false };
+      }
+    }
   }
 
+  return { success: false, rateLimited: false };
+};
+
+/**
+ * SIMPLIFIED: Check if page already loaded, if not retry until it loads
+ * Then notify user to complete booking manually
+ * NOW WITH RATE LIMITING HANDLING
+ */
+const startBooking = async (
+  page: Page,
+  browserNumber: number,
+  oid: string,
+  bot: TelegramBot,
+  displayInfo: DisplayInfo,
+  chatId: string | null,
+  timeoutMs = 5 * 60 * 60 * 1000 // 5 hours for retry loop
+) => {
+  const startTime = Date.now();
+  const bookingUrl = `https://www.goethe.de/coe?lang=en&oid=${oid}`;
+  let consecutiveRateLimits = 0;
+  let totalRateLimits = 0;
+
   try {
-    sendAccountLog(bot, chatId, acc, "🚀 Starting booking process...");
+    // STEP 1: Check if page is ALREADY loaded (since we redirected before calling this)
+    console.log(
+      `🔍 Browser ${browserNumber}: Checking if booking page already loaded...`
+    );
 
-    // Add display info to initial notification if available
-    if (displayInfo) {
-      sendAccountLog(
+    const alreadyLoaded = await isBookingPageLoaded(page);
+    const alreadyRateLimited = await isRateLimited(page);
+
+    if (alreadyRateLimited) {
+      console.log(
+        `🚫 Browser ${browserNumber}: Page already shows rate limit (429)`
+      );
+      consecutiveRateLimits++;
+      totalRateLimits++;
+
+      sendLog(
         bot,
         chatId,
-        acc,
-        `🖥️ Browser running on display ${displayInfo.display}\n` +
-        `🔗 noVNC Access: ${displayInfo.noVncUrl}\n` +
-        `🔌 VNC Port: ${displayInfo.vncPort}`
+        browserNumber,
+        `🚫 **Rate Limited on Initial Load**\n\n` +
+        `Starting retry loop with exponential backoff...`
       );
-    }
+    } else if (alreadyLoaded) {
+      // SUCCESS - Page already loaded correctly!
+      console.log(
+        `✅ Browser ${browserNumber}: Booking page already loaded successfully!`
+      );
 
-    const availableModules = await selectAvailableModules(page, acc.modules);
-
-    if (!availableModules) {
-      sendAccountLog(
+      sendLog(
         bot,
         chatId,
-        acc,
-        "Required modules not available, stopping booking."
-      );
-      return;
-    }
-
-    sendAccountLog(bot, chatId, acc, "Selected modules, continuing booking...");
-
-    await page.waitForSelector("button.cs-button--arrow_next", {
-      visible: true,
-    });
-    await page.click("button.cs-button--arrow_next");
-    console.log('Clicked "weiter" button');
-
-    await page.waitForNavigation({
-      waitUntil: "domcontentloaded",
-    });
-
-    await page.waitForSelector("button.cs-layer__button--high", {
-      visible: true,
-    });
-    const bookForButtons = await page.$$("button.cs-layer__button--high");
-    await bookForButtons[1]?.click();
-    console.log('🎯 Clicked "Book for me" button');
-
-    await page.waitForNavigation({
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForSelector("#username", { visible: true });
-    await page.type("#username", acc.email);
-
-    await page.type("#password", acc.password);
-
-    await page.click('input[type="submit"][name="submit"]');
-    sendAccountLog(bot, chatId, acc, "Submitted out login form");
-    console.log("🚀 Submitted login form");
-
-    try {
-      await page.waitForNavigation({
-        waitUntil: "networkidle2",
-        timeout: 20000,
-      });
-    } catch (err) {
-      console.log(" ℹ️ Error logging in:" + (err as Error).message);
-      sendAccountLog(
-        bot,
-        chatId,
-        acc,
-        "Error logging in, Please verify credentials."
-      );
-      return;
-    }
-
-    const bookingConflict = await handleBookingConflict(page);
-
-    await page.click("button.cs-button--arrow_next");
-
-    try {
-      await page.waitForNavigation({
-        waitUntil: "networkidle2",
-        timeout: 5000,
-      });
-      console.log("Navigated after DOB form");
-    } catch {
-      console.log("ℹ️ No navigation after DOB form (skipped step?)");
-    }
-
-    await page.click("button.cs-button--arrow_next");
-    await page.waitForNavigation({
-      waitUntil: "networkidle2",
-    });
-
-    if (bookingConflict) {
-      await page.click("button.cs-button--arrow_next");
-      await page.waitForNavigation({
-        waitUntil: "networkidle2",
-      });
-    }
-
-    console.log("Navigated to payment page");
-
-    let paymentMessage =
-      "Redirected to the payment page.\n" +
-      "💳 Please review all the details and complete the payment manually.\n" +
-      "⏳ You have approximately *30 minutes* to finish the payment before the session expires.\n\n";
-
-    if (displayInfo) {
-      paymentMessage +=
-        "🖥️ **Manual Access Available:**\n" +
-        `🔗 **noVNC URL:** ${displayInfo.noVncUrl}\n` +
+        browserNumber,
+        `✅ **PAGE ALREADY LOADED!**\n\n` +
         `🖥️ **Display:** ${displayInfo.display}\n` +
-        `🔌 **VNC Port:** ${displayInfo.vncPort}\n\n` +
-        "💡 **Instructions:**\n" +
-        "• Click the noVNC URL to access the browser remotely\n" +
-        "• Complete the payment process manually\n" +
-        "• The browser will remain open for manual interaction\n" +
-        "• Session will timeout in approximately 30 minutes";
+        `🔗 **noVNC URL:** ${displayInfo.noVncUrl}\n` +
+        `📌 **VNC Port:** ${displayInfo.vncPort}\n\n` +
+        `💡 **You can now complete the booking manually:**\n` +
+        `1. Click the noVNC URL to access the browser\n` +
+        `2. Complete the booking process\n` +
+        `3. Browser will remain open for manual use\n\n` +
+        `⏱️ Page was already loaded from redirect`
+      );
+
+      // Keep browser open indefinitely for manual booking
+      console.log(
+        `🖥️ Browser ${browserNumber}: Keeping browser open for manual booking...`
+      );
+      await delay(1800000);
+
+      return;
     } else {
-      paymentMessage +=
-        "🖥️ Please log in to the RDP to access the browser and complete payment.";
+      // Page not loaded correctly - get current state for logging
+      const currentTitle = await page.title();
+      console.log(
+        `⚠️ Browser ${browserNumber}: Page not loaded correctly. Title: "${currentTitle}"`
+      );
+
+      sendLog(
+        bot,
+        chatId,
+        browserNumber,
+        `⚠️ **Page Not Loaded Correctly**\n\n` +
+        `Current title: ${currentTitle}\n` +
+        `Starting retry loop...`
+      );
     }
 
-    sendAccountLog(bot, chatId, acc, paymentMessage);
-
-    // Keep account active for manual payment completion
-    // Don't set acc.status = false here since user needs to complete payment manually
-
-    // Wait for 30 minutes to allow manual payment completion
-    await delay(1800000);
-
-    // After timeout, disable account (payment should be completed by now)
-    acc.status = false;
-    await acc.save();
-
-    sendAccountLog(
-      bot,
-      chatId,
-      acc,
-      "⏰ Session timeout reached. Account has been disabled.\n" +
-      "If payment was completed successfully, the booking should be confirmed."
+    // STEP 2: START RETRY LOOP - Page didn't load correctly or rate limited
+    console.log(
+      `🔄 Browser ${browserNumber}: Starting 5-hour retry loop with rate limit handling...`
     );
+
+    let attempts = 0;
+    let baseRetryDelay = 5000; // Start with 5 seconds
+
+    while (true) {
+      const elapsed = Date.now() - startTime;
+
+      if (elapsed > timeoutMs) {
+        console.log(`⏰ Browser ${browserNumber}: 5 hour timeout reached`);
+        sendLog(
+          bot,
+          chatId,
+          browserNumber,
+          `⏰ Retry timeout reached (5 hours). Stopping retries.\n` +
+          `Total rate limits encountered: ${totalRateLimits}`
+        );
+        return;
+      }
+
+      attempts++;
+
+      // Calculate delay based on rate limiting
+      let retryDelay = baseRetryDelay;
+
+      if (consecutiveRateLimits > 0) {
+        // Exponential backoff when rate limited
+        retryDelay = getBackoffDelay(consecutiveRateLimits, 10000, 300000); // 10s base, max 5min
+        console.log(
+          `🕐 Browser ${browserNumber}: Rate limited ${consecutiveRateLimits} times, backing off for ${Math.round(
+            retryDelay / 1000
+          )}s...`
+        );
+      }
+
+      // Wait before retry
+      await delay(retryDelay);
+
+      try {
+        // Use navigateWithTimeout to reload the page
+        const navResult = await navigateWithTimeout(
+          page,
+          bookingUrl,
+          browserNumber
+        );
+
+        // Handle rate limiting
+        if (navResult.rateLimited) {
+          consecutiveRateLimits++;
+          totalRateLimits++;
+
+          const backoffTime = getBackoffDelay(
+            consecutiveRateLimits,
+            10000,
+            300000
+          );
+
+          console.log(
+            `🚫 Browser ${browserNumber}: Rate limited! (${consecutiveRateLimits} consecutive, ${totalRateLimits} total)`
+          );
+
+          // Notify on rate limits
+          if (consecutiveRateLimits === 1 || consecutiveRateLimits % 3 === 0) {
+            sendLog(
+              bot,
+              chatId,
+              browserNumber,
+              `🚫 **Rate Limited (429)**\n\n` +
+              `Consecutive: ${consecutiveRateLimits}\n` +
+              `Total: ${totalRateLimits}\n` +
+              `Next retry in: ${Math.round(backoffTime / 1000)}s\n` +
+              `Attempt: ${attempts}\n` +
+              `Elapsed: ${Math.round(elapsed / 60000)} min`
+            );
+          }
+
+          continue; // Skip to next iteration with exponential backoff
+        }
+
+        // Reset consecutive rate limits on successful navigation
+        if (consecutiveRateLimits > 0) {
+          console.log(
+            `✅ Browser ${browserNumber}: Rate limit cleared! Resetting backoff.`
+          );
+          consecutiveRateLimits = 0;
+        }
+
+        // Check if page loaded correctly now
+        const pageLoaded = await isBookingPageLoaded(page);
+
+        if (!pageLoaded) {
+          const retryPageTitle = await page.title();
+
+          // Notify every 20 attempts
+          if (attempts % 20 === 0) {
+            console.log(
+              `⚠️ Browser ${browserNumber}: Still seeing error (attempt ${attempts}): ${retryPageTitle}`
+            );
+            sendLog(
+              bot,
+              chatId,
+              browserNumber,
+              `⚠️ Still retrying...\n` +
+              `Attempt: ${attempts}\n` +
+              `Error: ${retryPageTitle}\n` +
+              `Rate limits: ${totalRateLimits}\n` +
+              `Elapsed: ${Math.round(elapsed / 60000)} min\n` +
+              `Remaining: ${Math.round((timeoutMs - elapsed) / 60000)} min`
+            );
+          }
+          continue;
+        }
+
+        // SUCCESS - Page loaded!
+        console.log(
+          `✅ Browser ${browserNumber}: Page loaded successfully after ${attempts} attempts!`
+        );
+
+        sendLog(
+          bot,
+          chatId,
+          browserNumber,
+          `✅ **PAGE LOADED SUCCESSFULLY!**\n\n` +
+          `🖥️ **Display:** ${displayInfo.display}\n` +
+          `🔗 **noVNC URL:** ${displayInfo.noVncUrl}\n` +
+          `📌 **VNC Port:** ${displayInfo.vncPort}\n\n` +
+          `🔄 **Attempts:** ${attempts}\n` +
+          `🚫 **Rate Limits:** ${totalRateLimits}\n` +
+          `⏱️ **Time:** ${Math.round(elapsed / 1000)}s\n\n` +
+          `💡 **You can now complete the booking manually:**\n` +
+          `1. Click the noVNC URL to access the browser\n` +
+          `2. Complete the booking process\n` +
+          `3. Browser will remain open for manual use`
+        );
+
+        // Keep browser open indefinitely for manual booking
+        console.log(
+          `🖥️ Browser ${browserNumber}: Keeping browser open for manual booking...`
+        );
+        await delay(1800000);
+        return;
+      } catch (navError) {
+        console.error(
+          `❌ Browser ${browserNumber}: Navigation error (attempt ${attempts}):`,
+          (navError as Error).message
+        );
+
+        // Notify on critical errors every 30 attempts
+        if (attempts % 30 === 0) {
+          sendLog(
+            bot,
+            chatId,
+            browserNumber,
+            `❌ Navigation error\n` +
+            `Attempt: ${attempts}\n` +
+            `Elapsed: ${Math.round(elapsed / 60000)} min\n` +
+            `Will keep retrying...`
+          );
+        }
+      }
+    }
   } catch (err) {
-    sendAccountLog(
+    console.error(`❌ Browser ${browserNumber}: Unexpected error:`, err);
+    sendLog(
       bot,
       chatId,
-      acc,
-      `Booking process failed: ${(err as Error).message}` +
-      (displayInfo
-        ? `\n🖥️ You can still access the browser at: ${displayInfo.noVncUrl}`
-        : "")
+      browserNumber,
+      `❌ Unexpected error: ${(err as Error).message}\n\n` +
+      `🖥️ Display: ${displayInfo.display}\n` +
+      `🔗 noVNC: ${displayInfo.noVncUrl}\n\n` +
+      `You may need to access manually.`
     );
-    console.error("Error in startBooking:", err);
+    await delay(1800000);
   }
 };
 
