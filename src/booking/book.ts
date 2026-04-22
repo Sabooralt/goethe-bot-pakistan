@@ -79,26 +79,28 @@ const navigateWithTimeout = async (
 ): Promise<{ success: boolean; rateLimited: boolean }> => {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      console.log(`[${identifier}] Navigation attempt ${attempt}/${maxAttempts}`);
+      console.log(`[${identifier}] 🔄 Navigation attempt ${attempt}/${maxAttempts}`);
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 5000 });
 
       if (await isRateLimited(page)) {
-        console.log(`[${identifier}] Rate limited detected`);
+        console.log(`[${identifier}] 🚫 Rate limited detected`);
         return { success: false, rateLimited: true };
       }
 
+      console.log(`[${identifier}] ✅ Page loaded within timeout`);
       return { success: true, rateLimited: false };
     } catch (error) {
       const err = error as Error;
       if (err.message.includes("timeout") || err.message.includes("Navigation timeout")) {
-        console.log(`[${identifier}] Timeout on attempt ${attempt}/${maxAttempts}`);
+        console.log(`[${identifier}] ⏰ Timeout on attempt ${attempt}/${maxAttempts}`);
         if (attempt < maxAttempts) {
           await delay(500);
           continue;
         }
+        console.log(`[${identifier}] ⚠️ All ${maxAttempts} attempts timed out — continuing anyway`);
         return { success: false, rateLimited: false };
       }
-      console.error(`[${identifier}] Navigation error: ${err.message}`);
+      console.error(`[${identifier}] ❌ Navigation error: ${err.message}`);
       return { success: false, rateLimited: false };
     }
   }
@@ -120,7 +122,7 @@ const runManualFlow = async (
   let consecutiveRateLimits = 0;
   let totalRateLimits = 0;
 
-  console.log(`[${identifier}] Title: "${await page.title()}" | URL: ${page.url()}`);
+  console.log(`[${identifier}] 🔍 Title: "${await page.title()}" | URL: ${page.url()}`);
 
   const alreadyLoaded = await isBookingPageLoaded(page);
   const alreadyRateLimited = await isRateLimited(page);
@@ -128,18 +130,21 @@ const runManualFlow = async (
   if (alreadyRateLimited) {
     consecutiveRateLimits++;
     totalRateLimits++;
-    sendLog(bot, chatId, identifier, `Rate limited on initial load, starting retry loop...`);
+    sendLog(bot, chatId, identifier,
+      `🚫 Rate limited on initial load — starting retry loop with exponential backoff`
+    );
   } else if (alreadyLoaded) {
-    sendLog(
-      bot, chatId, identifier,
-      `Page loaded\nDisplay: ${displayInfo.display}\nnoVNC: ${displayInfo.noVncUrl}\nComplete booking manually`
+    sendLog(bot, chatId, identifier,
+      `✅ *Page already loaded!*\n\n🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n\nComplete booking manually — browser stays open 30 min`
     );
     await delay(1800000);
     return;
   } else {
     const title = await page.title();
-    console.log(`[${identifier}] Page not loaded correctly. Title: "${title}"`);
-    sendLog(bot, chatId, identifier, `Page not loaded (title: ${title}), starting retry loop...`);
+    console.log(`[${identifier}] ⚠️ Page not loaded correctly. Title: "${title}"`);
+    sendLog(bot, chatId, identifier,
+      `⚠️ Page not loaded (title: ${title}) — starting retry loop`
+    );
   }
 
   let attempts = 0;
@@ -147,7 +152,9 @@ const runManualFlow = async (
   while (true) {
     const elapsed = Date.now() - startTime;
     if (elapsed > timeoutMs) {
-      sendLog(bot, chatId, identifier, `Retry timeout (5h). Rate limits total: ${totalRateLimits}`);
+      sendLog(bot, chatId, identifier,
+        `⏰ Retry timeout reached (5h)\nTotal rate limits: ${totalRateLimits} — stopping retries`
+      );
       return;
     }
 
@@ -158,7 +165,7 @@ const runManualFlow = async (
       : 5000;
 
     if (consecutiveRateLimits > 0) {
-      console.log(`[${identifier}] Rate limited ${consecutiveRateLimits}x, backing off ${Math.round(retryDelay / 1000)}s`);
+      console.log(`[${identifier}] 🕐 Rate limited ${consecutiveRateLimits}x — backing off ${Math.round(retryDelay / 1000)}s`);
     }
 
     await delay(retryDelay);
@@ -172,38 +179,37 @@ const runManualFlow = async (
         if (consecutiveRateLimits === 1 || consecutiveRateLimits % 3 === 0) {
           const backoff = getBackoffDelay(consecutiveRateLimits, 10000, 300000);
           sendLog(bot, chatId, identifier,
-            `Rate limited (${consecutiveRateLimits} consecutive, ${totalRateLimits} total)\nNext retry in ${Math.round(backoff / 1000)}s`
+            `🚫 *Rate Limited (429)*\nConsecutive: ${consecutiveRateLimits} | Total: ${totalRateLimits}\nNext retry in: ${Math.round(backoff / 1000)}s`
           );
         }
         continue;
       }
 
       if (consecutiveRateLimits > 0) {
-        console.log(`[${identifier}] Rate limit cleared`);
+        console.log(`[${identifier}] ✅ Rate limit cleared — resetting backoff`);
         consecutiveRateLimits = 0;
       }
 
       if (!await isBookingPageLoaded(page)) {
         if (attempts % 20 === 0) {
           sendLog(bot, chatId, identifier,
-            `Still retrying (attempt ${attempts})\nTitle: ${await page.title()}\nElapsed: ${Math.round(elapsed / 60000)} min`
+            `⚠️ Still retrying — attempt ${attempts}\nTitle: ${await page.title()}\nElapsed: ${Math.round(elapsed / 60000)} min`
           );
         }
         continue;
       }
 
-      sendLog(
-        bot, chatId, identifier,
-        `Page loaded after ${attempts} attempts (${Math.round(elapsed / 1000)}s)\nnoVNC: ${displayInfo.noVncUrl}\nComplete booking manually`
+      sendLog(bot, chatId, identifier,
+        `✅ *Page loaded successfully!*\n\nAttempts: ${attempts} | Time: ${Math.round(elapsed / 1000)}s\n🚫 Rate limits: ${totalRateLimits}\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n\nComplete booking manually — browser stays open 30 min`
       );
       await delay(1800000);
       return;
 
     } catch (navError) {
-      console.error(`[${identifier}] Navigation error attempt ${attempts}:`, (navError as Error).message);
+      console.error(`[${identifier}] ❌ Navigation error attempt ${attempts}:`, (navError as Error).message);
       if (attempts % 30 === 0) {
         sendLog(bot, chatId, identifier,
-          `Navigation error, still retrying (attempt ${attempts}, ${Math.round(elapsed / 60000)} min elapsed)`
+          `❌ Navigation error — still retrying\nAttempt: ${attempts} | Elapsed: ${Math.round(elapsed / 60000)} min`
         );
       }
     }
@@ -246,7 +252,7 @@ const runAutomatedFlow = async (
   while (true) {
     const elapsed = Date.now() - startTime;
     if (elapsed > timeoutMs) {
-      sendLog(bot, chatId, identifier, `Booking retry timeout (5h). Stopping.`);
+      sendLog(bot, chatId, identifier, `⏰ Booking retry timeout (5h) — stopping`);
       return;
     }
 
@@ -258,46 +264,45 @@ const runAutomatedFlow = async (
       title.includes("unterbrechung") ||
       /http\s?\d{3}/i.test(title)
     ) {
-      console.error(`[${identifier}] Error page detected (${title}), retrying in 5s...`);
-      sendLog(bot, chatId, identifier, `Error page detected, retrying...\nElapsed: ${Math.round(elapsed / 60000)} min`);
+      console.error(`[${identifier}] ⚠️ Error page detected (${title}), retrying in 5s...`);
+      sendLog(bot, chatId, identifier,
+        `⚠️ Error page detected (${title}) — retrying in 5s\nElapsed: ${Math.round(elapsed / 60000)} min`
+      );
       await delay(5000);
       continue;
     }
 
-    break; // Page loaded fine
+    break;
   }
 
   try {
-    sendLog(bot, chatId, identifier, `Starting automated booking...`);
-
-    if (displayInfo) {
-      sendLog(bot, chatId, identifier,
-        `Display: ${displayInfo.display}\nnoVNC: ${displayInfo.noVncUrl}\nVNC Port: ${displayInfo.vncPort}`
-      );
-    }
+    sendLog(bot, chatId, identifier, `🚀 Starting automated booking`);
+    sendLog(bot, chatId, identifier,
+      `🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n🔌 VNC Port: ${displayInfo.vncPort}`
+    );
 
     // Module selection
     const availableModules = await selectAvailableModules(page, account.modules);
     if (!availableModules) {
       sendLog(bot, chatId, identifier,
-        `Required modules not available\nnoVNC: ${displayInfo.noVncUrl}\nComplete manually if needed`
+        `⚠️ Required modules not available — stopping automation\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually if needed`
       );
-      await delay(1800000); // Keep browser open
+      await delay(1800000);
       return;
     }
 
-    sendLog(bot, chatId, identifier, `Modules selected, continuing...`);
+    sendLog(bot, chatId, identifier, `✅ Modules selected — continuing`);
 
     await page.waitForSelector("button.cs-button--arrow_next", { visible: true });
     await page.click("button.cs-button--arrow_next");
-    console.log(`[${identifier}] Clicked next button`);
+    console.log(`[${identifier}] ✅ Clicked next`);
 
     await page.waitForNavigation({ waitUntil: "domcontentloaded" });
 
     await page.waitForSelector("button.cs-layer__button--high", { visible: true });
     const bookForButtons = await page.$$("button.cs-layer__button--high");
     await bookForButtons[1]?.click();
-    console.log(`[${identifier}] Clicked book for me`);
+    console.log(`[${identifier}] ✅ Clicked book for me`);
 
     await page.waitForNavigation({ waitUntil: "domcontentloaded" });
 
@@ -306,13 +311,13 @@ const runAutomatedFlow = async (
     await page.type("#username", account.email);
     await page.type("#password", account.password);
     await page.click('input[type="submit"][name="submit"]');
-    sendLog(bot, chatId, identifier, `Login submitted`);
+    sendLog(bot, chatId, identifier, `🔐 Login submitted`);
 
     try {
       await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 20000 });
     } catch {
       sendLog(bot, chatId, identifier,
-        `Login failed or timed out. Check credentials.\nnoVNC: ${displayInfo.noVncUrl}\nComplete manually`
+        `❌ Login failed or timed out — check credentials\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually`
       );
       await delay(1800000);
       return;
@@ -324,7 +329,7 @@ const runAutomatedFlow = async (
     try {
       await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 5000 });
     } catch {
-      console.log(`[${identifier}] No navigation after DOB step (skipped)`);
+      console.log(`[${identifier}] ℹ️ No navigation after DOB step (skipped)`);
     }
 
     await page.click("button.cs-button--arrow_next");
@@ -335,10 +340,10 @@ const runAutomatedFlow = async (
       await page.waitForNavigation({ waitUntil: "networkidle2" });
     }
 
-    console.log(`[${identifier}] Reached payment page`);
+    console.log(`[${identifier}] ✅ Reached payment page`);
 
     sendLog(bot, chatId, identifier,
-      `Redirected to payment page\nReview details and complete payment manually (30 min window)\nnoVNC: ${displayInfo.noVncUrl}\nDisplay: ${displayInfo.display}`
+      `✅ *Redirected to payment page!*\n\n💳 Review details and complete payment manually\n⏳ ~30 min before session expires\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n🖥️ Display: ${displayInfo.display}`
     );
 
     await delay(1800000);
@@ -346,13 +351,14 @@ const runAutomatedFlow = async (
     account.status = false;
     await account.save();
 
-    sendLog(bot, chatId, identifier, `Session timeout. Account disabled. Booking should be confirmed if payment was completed.`);
+    sendLog(bot, chatId, identifier,
+      `⏰ Session timeout — account disabled\nIf payment was completed, booking is confirmed`
+    );
 
   } catch (err) {
-    // Never close — notify and keep open for manual intervention
-    console.error(`[${identifier}] Automated flow error:`, err);
+    console.error(`[${identifier}] ❌ Automated flow error:`, err);
     sendLog(bot, chatId, identifier,
-      `Automation failed: ${(err as Error).message}\nnoVNC: ${displayInfo.noVncUrl}\nComplete manually`
+      `❌ *Automation failed:* ${(err as Error).message}\n\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually — browser stays open 30 min`
     );
     await delay(1800000);
   }
@@ -375,7 +381,7 @@ const startBooking = async (
 
   const bookingUrl = `https://www.goethe.de/coe?lang=en&oid=${oid}`;
 
-  console.log(`[${identifier}] Title: "${await page.title()}" | URL: ${page.url()}`);
+  console.log(`[${identifier}] 🔍 Title: "${await page.title()}" | URL: ${page.url()}`);
 
   if (account) {
     const resolvedChatId = chatId ?? (account.user as UserDocument).telegramId;
