@@ -22,7 +22,7 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
   scheduleId?: string
 ) => {
   const startTime = Date.now();
-  console.log(`⚡⚡⚡ REDIRECTING PREWARMED BROWSERS - OID: ${oid}`);
+  console.log(`⚡REDIRECTING PREWARMED BROWSERS - OID: ${oid}`);
 
   let user: UserDocument | null = null;
 
@@ -64,11 +64,7 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
     `🔥 Found ${prewarmedBrowsers.length} prewarmed browsers ready to redirect`
   );
 
-  sendLog(
-    `⚡⚡⚡ **OID DETECTED - REDIRECTING NOW**\n` +
-    `🆔 OID: ${oid}\n` +
-    `🚀 Using ${prewarmedBrowsers.length} prewarmed browsers...`
-  );
+
 
   // Navigate ALL browsers in PARALLEL
   console.log(

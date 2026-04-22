@@ -2,6 +2,7 @@ import { Browser, Page } from "puppeteer";
 import puppeteer from "puppeteer-extra";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { browserArgs } from "../utils/browserArgs";
 
 puppeteer.use(StealthPlugin());
 
@@ -67,33 +68,7 @@ class PrewarmedBrowserPool {
                 }
             }
 
-            const browserArgs = [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-blink-features=AutomationControlled',
-
-                '--use-gl=swiftshader',         // software WebGL — fixes WebGL red flags
-                '--enable-webgl',
-                '--ignore-gpu-blocklist',
-                '--use-angle=swiftshader-webgl',
-
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-                '--no-first-run',
-                '--no-default-browser-check',
-                '--disable-default-apps',
-                '--disable-background-networking',
-                '--disable-breakpad',
-                '--disable-client-side-phishing-detection',
-                '--disable-sync',
-                '--force-color-profile=srgb',
-                '--mute-audio',
-                '--disable-extensions',
-                '--disable-popup-blocking',
-
-            ]
+            const args = browserArgs;
 
             if (proxy) {
                 browserArgs.push(
@@ -103,17 +78,22 @@ class PrewarmedBrowserPool {
 
             const browser = await puppeteer.launch({
                 headless: false,
-                executablePath: "/usr/bin/chromium-browser",
+                executablePath: "/usr/bin/google-chrome",
+                userDataDir: `./profile-${browserNumber}`,
                 env: {
                     DISPLAY: display,
                 },
-                args: browserArgs,
-                timeout: 30000,
+                args: args,
+                timeout: 3000,
                 protocolTimeout: 180000,
+                defaultViewport: null,
             });
 
             const page = await browser.newPage();
-            await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+            const width = 1920 + Math.floor(Math.random() * 120);
+  const height = 1080 + Math.floor(Math.random() * 80);
+  await page.setViewport({ width, height });
 
 
             if (proxy && proxy.username && proxy.password) {
@@ -121,7 +101,7 @@ class PrewarmedBrowserPool {
                     username: proxy.username,
                     password: proxy.password,
                 });
-            } 
+            }
 
             await page.setDefaultNavigationTimeout(180000);
             await page.setDefaultTimeout(180000);
@@ -142,30 +122,7 @@ class PrewarmedBrowserPool {
                 }
             });
 
-            // Set cookies and storage
-            await page.evaluateOnNewDocument(() => {
-                localStorage.setItem(
-                    "uc_gcm",
-                    JSON.stringify({
-                        adsDataRedaction: true,
-                        adPersonalization: "denied",
-                        adStorage: "denied",
-                        adUserData: "denied",
-                        analyticsStorage: "denied",
-                    })
-                );
-                localStorage.setItem("uc_ui_version", "3.73.0");
-                localStorage.setItem("uc_user_interaction", "true");
-                localStorage.setItem(
-                    "uc_settings",
-                    JSON.stringify({
-                        controllerId:
-                            "42e213448633d19d017343f77368ef4ab462b0ca1fb10607c313393260b08f21",
-                        id: "rTbKQ4Qc-",
-                        services: [],
-                    })
-                );
-            });
+
 
             console.log(`✅ Pre-warmed browser ${browserNumber}`);
 
@@ -185,45 +142,8 @@ class PrewarmedBrowserPool {
         }
     }
 
-    // Pre-navigate browsers to Goethe domain for faster connection
-    async preNavigateBrowsers(): Promise<void> {
-        if (this.preNavigated) return;
 
-        const browsers = this.getAllReadyBrowsers();
 
-        console.log(
-            `🌐 Pre-navigating ${browsers.length} browsers to goethe.de...`
-        );
-
-        const navPromises = browsers.map(async (browser) => {
-            try {
-                // Pre-establish connection to Goethe domain
-                await browser.page.goto("https://www.goethe.de/", {
-                    waitUntil: "domcontentloaded",
-                    timeout: 10000,
-                });
-                console.log(`✅ Pre-navigated browser ${browser.browserNumber}`);
-                return true;
-            } catch (error) {
-                console.warn(
-                    `⚠️ Pre-navigation failed for browser ${browser.browserNumber}`
-                );
-                return false;
-            }
-        });
-
-        const results = await Promise.allSettled(navPromises);
-        const successful = results.filter(
-            (r) => r.status === "fulfilled" && r.value
-        ).length;
-
-        console.log(
-            `🌐 Pre-navigation complete: ${successful}/${browsers.length} successful`
-        );
-        this.preNavigated = true;
-    }
-
-    // MODIFIED: Warm exactly 20 browsers (no user/account dependency)
     async warmup20Browsers(): Promise<void> {
         try {
             console.log(`🔥 Warming up 20 browsers...`);

@@ -4,6 +4,8 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
 import dotenv from "dotenv";
 import { Page } from "puppeteer";
+import { proxyPool, USE_PROXIES } from "../proxyPool";
+import { browserArgs } from "../utils/browserArgs";
 
 dotenv.config();
 
@@ -80,7 +82,7 @@ const navigateWithTimeout = async (
       // Try to load with 5 second timeout
       await page.goto(url, {
         waitUntil: "domcontentloaded",
-        timeout: 5000, // 5 seconds
+        timeout: 20000, // 20 seconds
       });
 
       // Check for rate limiting
@@ -141,6 +143,30 @@ const startBooking = async (
   const username = "customer-Ashon_UbFVW-cc-US";
   const password = "Ashon+482001";
 
+  let proxy: any = null;
+  let proxyUrl = "";
+  if (USE_PROXIES) {
+    proxy = proxyPool.getNextProxy();
+    if (proxy) {
+      proxyUrl = `${proxy.host}:${proxy.port}`;
+      console.log(`🔒 Proxy ${proxyUrl} → Browser ${browserNumber}`);
+    }
+  }
+
+  const args = browserArgs;
+
+  if (proxy) {
+    args.push(
+      `--proxy-server=${proxy.type}://${proxy.host}:${proxy.port}`
+    );
+  }
+
+  if (browserNumber) {
+    args.push(
+      `--display=:${browserNumber}`
+    )
+  }
+
 
   const browser = await puppeteer.launch({
     headless: false,
@@ -149,20 +175,26 @@ const startBooking = async (
     env: {
       display: `:${browserNumber}`,
     },
-    args: [
-
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      `--display=:${browserNumber}`,
-
-    ],
+    args,
+    defaultViewport: null,
   })
+
   const startTime = Date.now();
   const bookingUrl = `https://www.goethe.de/coe?lang=en&oid=${oid}`;
 
   const page = await browser.newPage();
 
-  console.log("Page loaded!");
+  const width = 1920 + Math.floor(Math.random() * 120);
+  const height = 1080 + Math.floor(Math.random() * 80);
+  await page.setViewport({ width, height });
+
+  if (proxy && proxy.username && proxy.password) {
+    await page.authenticate({
+      username: proxy.username,
+      password: proxy.password,
+    });
+  }
+
 
 
   await page.goto(bookingUrl, { waitUntil: "networkidle2" });

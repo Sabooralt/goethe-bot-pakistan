@@ -2,7 +2,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-const MOCK_DATA_PATH = path.join(__dirname, '../exam-data.json');
+const MOCK_DATA_PATH = path.join(__dirname, '../data/exam-data.json');
 
 // Helper function to read mock data
 export async function readMockData(): Promise<any> {

@@ -69,6 +69,13 @@ app.get("/api/mock-exam", async (req: Request, res: Response) => {
   }
 });
 
+app.post("/api/reset-schedule", async (req, res) => {
+  await Schedule.deleteMany();
+
+  console.log("Success!")
+  res.json({ success: true })
+})
+
 /**
  * POST /api/trigger-booking
  * Simulates booking opening by adding OID to the exam
@@ -79,7 +86,7 @@ app.post("/api/trigger-booking", async (req: Request, res: Response) => {
     const mockData = await readMockData();
 
     const oid =
-      "c90fb541feb2cde34016f2bfeb753649186d6c0084943271ad8dda7377a2b0c5";
+      "13b81c3f40dcf835f612f2c00ff1cf084893f5072e83c0e8c6d13d5ded236095";
     const examIndex = 0;
 
     // Generate OID if not provided

@@ -92,7 +92,6 @@ class ExamMonitor {
       }
 
       const browserArgs = [
-        '--display=:2',
         "--no-sandbox",
         "--disable-setuid-sandbox",
 
@@ -103,20 +102,12 @@ class ExamMonitor {
         );
       }
       this.browser = await puppeteer.launch({
-        headless: false,
+        headless: true,
         executablePath: "/usr/bin/google-chrome",
         userDataDir: "./profile",
-        env: { display: ":2" },
         args: browserArgs,
       });
-
-
-
-
-
       this.page = await this.browser.newPage();
-
-
       if (proxy && proxy.username && proxy.password) {
         await this.page.authenticate({
           username: proxy.username,
@@ -161,6 +152,12 @@ class ExamMonitor {
     maxRetries = 30,
     retryDelay = 5000
   ): Promise<string | null> {
+
+    if (process.env.TEST_MODE === "true") {
+      this.apiUrl = "http://localhost:3001/api/mock-exam";
+      console.log("[captureApiUrl] Test mode - using mock URL directly");
+      return this.apiUrl;
+    }
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       console.log(`[captureApiUrl] Attempt ${attempt}/${maxRetries}`);
 
@@ -228,6 +225,21 @@ class ExamMonitor {
   }
 
   private async browserApiCall(): Promise<ApiResponse | null> {
+
+    if (process.env.TEST_MODE === "true" && this.apiUrl?.includes("localhost")) {
+      try {
+        const res = await fetch(this.apiUrl);
+        if (!res.ok) return null;
+        const data = await res.json();
+        this.consecutiveErrors = 0;
+        this.lastSuccessfulPoll = new Date();
+        return data;
+      } catch (error) {
+        this.consecutiveErrors++;
+        console.error("[api] Direct fetch error:", error);
+        return null;
+      }
+    }
     if (!this.apiUrl || !this.page) return null;
 
     const startTime = Date.now();
@@ -350,20 +362,13 @@ class ExamMonitor {
 
     const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
     const targetDatePKT = new Date(targetDate.getTime() + PKT_OFFSET_MS);
-    const targetDateStr = targetDatePKT.toISOString().split("T")[0];
-    const targetTimeStr = targetDatePKT.toISOString().split("T")[1].substring(0, 5);
-    const [year, month, day] = targetDateStr.split("-");
+    const [year, month, day] = targetDatePKT.toISOString().split("T")[0].split("-");
     const targetBookFromDate = `${day}.${month}.${year}`;
-    const targetBookFromTime = `${targetTimeStr}:00.000`;
 
-    console.log("[startPolling] Starting polling");
     console.log(`[startPolling] Target (UTC): ${targetDate.toISOString()}`);
     console.log(`[startPolling] Target (PKT): ${targetDatePKT.toISOString()}`);
-    console.log(`[startPolling] bookFrom: ${targetBookFromDate}`);
-    console.log(`[startPolling] bookFromTime: ${targetBookFromTime}`);
-    console.log(`[startPolling] Interval: ${interval}ms`);
+    console.log(`[startPolling] bookFrom date: ${targetBookFromDate}`);
     console.log(`[startPolling] Priority locations: ${priorityLocations.join(", ")}`);
-    console.log(`[startPolling] Timezone: PKT (UTC+5:00)`);
 
     this.isPolling = true;
 
@@ -396,7 +401,7 @@ class ExamMonitor {
         this.pollCount++;
 
         const data = await this.browserApiCall();
-
+        console.log(`[poll] Raw data:`, JSON.stringify(data)?.substring(0, 200));
         if (!data?.DATA || !Array.isArray(data.DATA)) {
           if (this.pollCount % 10 === 0) {
             console.log(`[poll] No data returned (${this.pollCount} polls)`);
@@ -448,11 +453,8 @@ class ExamMonitor {
         } else {
           // Scan for matching exam
           const matchingExams = data.DATA.filter(
-            (exam: ExamData) =>
-              exam.bookFrom === targetBookFromDate &&
-              exam.bookFromTime === targetBookFromTime
+            (exam: ExamData) => exam.bookFrom === targetBookFromDate
           );
-
           if (matchingExams.length > 0) {
             const exam = this.prioritizeExams(matchingExams, priorityLocations)[0];
 

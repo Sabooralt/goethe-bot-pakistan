@@ -172,7 +172,7 @@ class ExamScheduler {
     try {
       // Step 1: Warm up 20 browsers
       console.log(`🔥 Warming up 20 browsers for ${schedule.name}...`);
-     /*  await browserPool.warmup20Browsers(); */
+      await browserPool.warmup20Browsers();
 
       session.browsersPrewarmed = true;
       session.status = "monitoring";
@@ -193,10 +193,9 @@ class ExamScheduler {
 
       await examMonitor.startPolling(
         process.env.TEST_MODE === "true"
-          ? new Date("2025-10-17T03:30:00.000Z")
+          ? new Date("2026-04-24T10:00:00.000Z")
           : schedule.runAt,
         {
-          interval: 1000,
           maxDurationMs: 5 * 60 * 60 * 1000,
 
           onExamWithOid: async (exam: ExamData) => {
@@ -204,7 +203,7 @@ class ExamScheduler {
             if (!oid) {
               return;
             }
-            console.log(`🎯 OID FOUND: ${oid}`);
+            console.log(`OID FOUND: ${oid}`);
             session.status = "processing";
 
             setImmediate(() => {
@@ -233,6 +232,23 @@ class ExamScheduler {
             });
 
             this.activeMonitoringSessions.delete(scheduleId);
+          },
+          onExamFound: async (exam: ExamData) => {
+            console.log(`[scheduler] 🔒 Exam locked for ${schedule.name}`);
+            if (user.telegramId) {
+              await bot.sendMessage(
+                user.telegramId,
+                `🔒 *Exam Locked!*\n\n` +
+                `📋 Schedule: ${schedule.name}\n` +
+                `📍 Location: ${exam.locationName || "Unknown"}\n` +
+                `📅 Exam Date: ${exam.startDate || "Unknown"}\n` +
+                `🕐 Booking Opens: ${exam.bookFrom} ${exam.bookFromTimeFormatted || exam.bookFromTime}\n` +
+                `💰 Price: ${exam.price || "N/A"}\n` +
+                `🪑 Seats Available: ${exam.availability ?? "N/A"}\n\n` +
+                `⏳ Waiting for the exam to open now...`,
+                { parse_mode: "Markdown" }
+              );
+            }
           },
 
           onTimeout: async () => {
@@ -305,8 +321,8 @@ class ExamScheduler {
       if (user.telegramId) {
         await bot.sendMessage(
           user.telegramId,
-          `⚡ **Launching Browsers**\n\n` +
-          `🌐 Redirecting all prewarmed browsers to booking page in parallel...\n` +
+          `**Launching Browsers**\n\n` +
+          ` Redirecting all prewarmed browsers to booking page in parallel...\n` +
           `🆔 OID: ${oid}`,
           { parse_mode: "Markdown" }
         );
