@@ -1,233 +1,340 @@
-import puppeteer, { Page } from "puppeteer";
-import { selectAvailableModules } from "../fillers/selectAllModules";
-import { handleBookingConflict } from "../fillers/handleBookingConflict";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
-interface AccountModules {
-  read: boolean;
-  hear: boolean;
-  write: boolean;
-  speak: boolean;
-}
 
-let display = ":1"
-const run = async () => {
-  const browser = await puppeteer.launch({
-    headless: false,
-    env: { DISPLAY: display },
-    args: [
-      // Performance optimizations
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-web-security",
-      "--disable-features=VizDisplayCompositor",
-      `--display=${display}`,
+import dotenv from "dotenv";
+import { Page } from "puppeteer";
 
-      // Disable unnecessary features for speed
-      "--disable-gpu",
-      "--disable-software-rasterizer",
-      "--disable-background-timer-throttling",
-      "--disable-backgrounding-occluded-windows",
-      "--disable-renderer-backgrounding",
-      "--disable-features=TranslateUI",
-      "--disable-ipc-flooding-protection",
+dotenv.config();
 
-      // Skip first run tasks
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--disable-default-apps",
+puppeteer.use(StealthPlugin());
 
-      // Disable telemetry and unnecessary network calls
-      "--disable-background-networking",
-      "--disable-breakpad",
-      "--disable-client-side-phishing-detection",
-      "--disable-component-extensions-with-background-pages",
-      "--disable-domain-reliability",
-      "--disable-features=AutofillServerCommunication",
-      "--disable-sync",
 
-      // Performance flags
-      "--enable-features=NetworkService,NetworkServiceInProcess",
-      "--force-color-profile=srgb",
-      "--metrics-recording-only",
-      "--mute-audio",
 
-      // Memory optimization
-      "--max_old_space_size=512",
-      "--memory-pressure-off",
 
-      // Additional speed optimizations
-      "--disable-blink-features=AutomationControlled",
-      "--disable-logging",
-      "--disable-permissions-api",
-      "--disable-save-password-bubble",
-      "--disable-single-click-autofill",
-      "--disable-extensions",
-      "--disable-popup-blocking",
-      "--disable-prompt-on-repost",
-    ],
-  });
-  const page = await browser.newPage();
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const url =
-    "https://www.goethe.de/ins/pk/en/spr/prf/gzb2.cfm"; // Replace with your website
 
-  await page.goto(url, { waitUntil: "networkidle2" });
 
-  console.log("URL Reached!")
-  // Example account modules
- /*  const accountModules: AccountModules = {
-    read: true,
-    hear: true,
-    write: true,
-    speak: true,
-  };
-
-  await page.evaluateOnNewDocument(() => {
-    localStorage.setItem(
-      "uc_gcm",
-      JSON.stringify({
-        adsDataRedaction: true,
-        adPersonalization: "denied",
-        adStorage: "denied",
-        adUserData: "denied",
-        analyticsStorage: "denied",
-      })
-    );
-
-    localStorage.setItem("uc_ui_version", "3.73.0");
-    localStorage.setItem("uc_user_interaction", "true");
-
-    localStorage.setItem(
-      "uc_settings",
-      JSON.stringify({
-        controllerId:
-          "42e213448633d19d017343f77368ef4ab462b0ca1fb10607c313393260b08f21",
-        id: "rTbKQ4Qc-",
-        services: [],
-      })
-    );
-  });
-
-  await page.setRequestInterception(true);
-  page.on("request", (req) => {
-    const resourceType = req.resourceType();
-    if (
-      resourceType === "image" ||
-      resourceType === "font" ||
-      resourceType === "media" ||
-      resourceType === "other"
-    ) {
-      req.abort();
-    } else {
-      req.continue();
-    }
-  });
-
-  let maxRetries = 20;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    await page.goto(
-      `https://www.goethe.de/coe?lang=en&oid=4d593ed99a6f2206d516e9314a26809574d64026e3ae71e8c6350bf6654e359d`,
-      {
-        waitUntil: "domcontentloaded",
-      }
-    );
-    const pageTitle = (await page.title()).toLowerCase();
-    if (
-      pageTitle.includes("error") ||
-      pageTitle.includes("unterbrechung") ||
-      /http\s?\d{3}/i.test(pageTitle)
-    ) {
-      console.error(`Booking error detected on attempt ${attempt}`);
-
-      if (attempt === maxRetries) {
-        console.log("Max retries reached. Stopping booking.");
-        return;
-      }
-      continue;
-    }
-    break;
-  }
-  try {
-    const availableModules = await selectAvailableModules(page, accountModules);
-
-    if (!availableModules) {
-      console.log("No modules available, stopping booking.");
-    }
-
-    await page.waitForSelector("button.cs-button--arrow_next", {
-      visible: true,
-    });
-    await page.click("button.cs-button--arrow_next");
-    console.log('Clicked "weiter" button');
-
-    await page.waitForNavigation({
-      waitUntil: "domcontentloaded",
-    });
-
-    await page.waitForSelector("button.cs-layer__button--high", {
-      visible: true,
-    });
-    const bookForButtons = await page.$$("button.cs-layer__button--high");
-    await bookForButtons[1]?.click();
-    console.log('🎯 Clicked "Book for me" button');
-
-    await page.waitForNavigation({
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForSelector("#username", { visible: true });
-    await page.type("#username", "Jerinjoseph898@gmail.com");
-
-    await page.type("#password", "Jerin@898");
-    console.log("Submitted login form");
-
-    await page.click('input[type="submit"][name="submit"]');
-    console.log("🚀 Submitted login form");
-
-    try {
-      await page.waitForNavigation({
-        waitUntil: "networkidle2",
-        timeout: 200000,
-      });
-    } catch (err) {
-      console.log(" ℹ️ Error logging in:" + (err as Error).message);
-    }
-
-    const bookingConflict = await handleBookingConflict(page);
-
-    await page.click("button.cs-button--arrow_next");
-
-    try {
-      await page.waitForNavigation({
-        waitUntil: "networkidle2",
-        timeout: 5000,
-      });
-      console.log("Navigated after DOB form");
-    } catch {
-      console.log("ℹ️ No navigation after DOB form (skipped step?)");
-    }
-
-    await page.click("button.cs-button--arrow_next");
-    await page.waitForNavigation({
-      waitUntil: "networkidle2",
-    });
-
-    if (bookingConflict) {
-      await page.click("button.cs-button--arrow_next");
-      await page.waitForNavigation({
-        waitUntil: "networkidle2",
-      });
-    }
-
-    console.log("Navigated to payment page");
-
-    let paymentMessage =
-      "Redirected to the payment page.\n" +
-      "💳 Please review all the details and complete the payment manually.\n" +
-      "⏳ You have approximately *10 minutes* to finish the payment before the session expires.\n\n";
-  } catch (err) {
-    console.log(err);
-  } */
+/**
+ * Calculate exponential backoff delay
+ */
+const getBackoffDelay = (
+  attempt: number,
+  baseDelay: number = 5000,
+  maxDelay: number = 300000
+): number => {
+  // Exponential: 5s, 10s, 20s, 40s, 80s, 160s, 300s (capped at 5min)
+  const exponentialDelay = baseDelay * Math.pow(2, Math.min(attempt - 1, 6));
+  return Math.min(exponentialDelay, maxDelay);
 };
 
-run().catch(console.error);
+/**
+ * Check if page has rate limit error (429)
+ */
+const isRateLimited = async (page: Page): Promise<boolean> => {
+  try {
+    const content = await page.content();
+    const title = (await page.title()).toLowerCase();
+
+    // Check for 429 indicators
+    return (
+      content.includes("429") ||
+      content.includes("too many requests") ||
+      content.includes("rate limit") ||
+      title.includes("429") ||
+      title.includes("too many requests")
+    );
+  } catch (error) {
+    return false;
+  }
+};
+
+/**
+ * Check if booking page loaded successfully
+ */
+const isBookingPageLoaded = async (page: Page): Promise<boolean> => {
+  try {
+    const pageTitle = (await page.title()).toLocaleLowerCase();
+    return pageTitle.includes("options");
+  } catch (error) {
+    return false;
+  }
+};
+
+/**
+ * Navigate to URL with 5 second timeout - refresh if it takes longer
+ */
+const navigateWithTimeout = async (
+  page: Page,
+  url: string,
+  browserNumber: number,
+  maxAttempts = 3
+): Promise<{ success: boolean; rateLimited: boolean }> => {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(
+        `🔄 Browser ${browserNumber}: Navigation attempt ${attempt}/${maxAttempts}...`
+      );
+
+      // Try to load with 5 second timeout
+      await page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: 5000, // 5 seconds
+      });
+
+      // Check for rate limiting
+      const rateLimited = await isRateLimited(page);
+      if (rateLimited) {
+        console.log(`🚫 Browser ${browserNumber}: Rate limited (429) detected`);
+        return { success: false, rateLimited: true };
+      }
+
+      console.log(`✅ Browser ${browserNumber}: Page loaded within 5 seconds`);
+      return { success: true, rateLimited: false }; // Success!
+    } catch (error) {
+      const err = error as Error;
+
+      if (
+        err.message.includes("timeout") ||
+        err.message.includes("Navigation timeout")
+      ) {
+        console.log(
+          `⏰ Browser ${browserNumber}: Page took >5s to load (attempt ${attempt}/${maxAttempts}), refreshing...`
+        );
+
+        // If not the last attempt, continue to next iteration (refresh)
+        if (attempt < maxAttempts) {
+          await delay(500); // Small delay before retry
+          continue;
+        } else {
+          console.log(
+            `⚠️ Browser ${browserNumber}: All ${maxAttempts} attempts timed out, continuing anyway...`
+          );
+          return { success: false, rateLimited: false }; // Failed all attempts but continue
+        }
+      } else {
+        // Other errors (not timeout) - log and continue
+        console.error(
+          `❌ Browser ${browserNumber}: Navigation error: ${err.message}`
+        );
+        return { success: false, rateLimited: false };
+      }
+    }
+  }
+
+  return { success: false, rateLimited: false };
+};
+
+/**
+ * SIMPLIFIED: Check if page already loaded, if not retry until it loads
+ * Then notify user to complete booking manually
+ * NOW WITH RATE LIMITING HANDLING
+ */
+const startBooking = async (
+  browserNumber: number = 2,
+  oid: string,
+  timeoutMs = 5 * 60 * 60 * 1000 // 5 hours for retry loop
+) => {
+
+  const proxyHost = "pr.oxylabs.io:7777";
+  const username = "customer-Ashon_UbFVW-cc-US";
+  const password = "Ashon+482001";
+
+
+  const browser = await puppeteer.launch({
+    headless: false,
+    executablePath: "/usr/bin/google-chrome",
+    userDataDir: "./profile",
+    env: {
+      display: `:${browserNumber}`,
+    },
+    args: [
+
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      `--display=:${browserNumber}`,
+
+    ],
+  })
+  const startTime = Date.now();
+  const bookingUrl = `https://www.goethe.de/coe?lang=en&oid=${oid}`;
+
+  const page = await browser.newPage();
+
+  console.log("Page loaded!");
+
+
+  await page.goto(bookingUrl, { waitUntil: "networkidle2" });
+
+  console.log("Url reached!");
+
+
+  let consecutiveRateLimits = 0;
+  let totalRateLimits = 0;
+
+  try {
+    // STEP 1: Check if page is ALREADY loaded (since we redirected before calling this)
+    console.log(
+      `🔍 Browser ${browserNumber}: Checking if booking page already loaded...`
+    );
+
+    const alreadyLoaded = await isBookingPageLoaded(page);
+    const alreadyRateLimited = await isRateLimited(page);
+
+    if (alreadyRateLimited) {
+      console.log(
+        `🚫 Browser ${browserNumber}: Page already shows rate limit (429)`
+      );
+      consecutiveRateLimits++;
+      totalRateLimits++;
+
+
+    } else if (alreadyLoaded) {
+      // SUCCESS - Page already loaded correctly!
+      console.log(
+        `✅ Browser ${browserNumber}: Booking page already loaded successfully!`
+      );
+
+
+
+      // Keep browser open indefinitely for manual booking
+      console.log(
+        `🖥️ Browser ${browserNumber}: Keeping browser open for manual booking...`
+      );
+      await delay(1800000);
+
+      return;
+    } else {
+      // Page not loaded correctly - get current state for logging
+      const currentTitle = await page.title();
+      console.log(
+        `⚠️ Browser ${browserNumber}: Page not loaded correctly. Title: "${currentTitle}"`
+      );
+
+
+    }
+
+    // STEP 2: START RETRY LOOP - Page didn't load correctly or rate limited
+    console.log(
+      `🔄 Browser ${browserNumber}: Starting 5-hour retry loop with rate limit handling...`
+    );
+
+    let attempts = 0;
+    let baseRetryDelay = 5000; // Start with 5 seconds
+
+    while (true) {
+      const elapsed = Date.now() - startTime;
+
+      if (elapsed > timeoutMs) {
+        console.log(`⏰ Browser ${browserNumber}: 5 hour timeout reached`);
+
+        return;
+      }
+
+      attempts++;
+
+      // Calculate delay based on rate limiting
+      let retryDelay = baseRetryDelay;
+
+      if (consecutiveRateLimits > 0) {
+        // Exponential backoff when rate limited
+        retryDelay = getBackoffDelay(consecutiveRateLimits, 10000, 300000); // 10s base, max 5min
+        console.log(
+          `🕐 Browser ${browserNumber}: Rate limited ${consecutiveRateLimits} times, backing off for ${Math.round(
+            retryDelay / 1000
+          )}s...`
+        );
+      }
+
+      // Wait before retry
+      await delay(retryDelay);
+
+      try {
+        // Use navigateWithTimeout to reload the page
+        const navResult = await navigateWithTimeout(
+          page,
+          bookingUrl,
+          browserNumber
+        );
+
+        // Handle rate limiting
+        if (navResult.rateLimited) {
+          consecutiveRateLimits++;
+          totalRateLimits++;
+
+          const backoffTime = getBackoffDelay(
+            consecutiveRateLimits,
+            10000,
+            300000
+          );
+
+          console.log(
+            `🚫 Browser ${browserNumber}: Rate limited! (${consecutiveRateLimits} consecutive, ${totalRateLimits} total)`
+          );
+
+          // Notify on rate limits
+          if (consecutiveRateLimits === 1 || consecutiveRateLimits % 3 === 0) {
+
+          }
+
+          continue; // Skip to next iteration with exponential backoff
+        }
+
+        // Reset consecutive rate limits on successful navigation
+        if (consecutiveRateLimits > 0) {
+          console.log(
+            `✅ Browser ${browserNumber}: Rate limit cleared! Resetting backoff.`
+          );
+          consecutiveRateLimits = 0;
+        }
+
+        // Check if page loaded correctly now
+        const pageLoaded = await isBookingPageLoaded(page);
+
+        if (!pageLoaded) {
+          const retryPageTitle = await page.title();
+
+          // Notify every 20 attempts
+          if (attempts % 20 === 0) {
+            console.log(
+              `⚠️ Browser ${browserNumber}: Still seeing error (attempt ${attempts}): ${retryPageTitle}`
+            );
+
+          }
+          continue;
+        }
+
+        // SUCCESS - Page loaded!
+        console.log(
+          `✅ Browser ${browserNumber}: Page loaded successfully after ${attempts} attempts!`
+        );
+
+
+
+        // Keep browser open indefinitely for manual booking
+        console.log(
+          `🖥️ Browser ${browserNumber}: Keeping browser open for manual booking...`
+        );
+        await delay(1800000);
+        return;
+      } catch (navError) {
+        console.error(
+          `❌ Browser ${browserNumber}: Navigation error (attempt ${attempts}):`,
+          (navError as Error).message
+        );
+
+        // Notify on critical errors every 30 attempts
+        if (attempts % 30 === 0) {
+
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`❌ Browser ${browserNumber}: Unexpected error:`, err);
+
+    await delay(1800000);
+  }
+};
+
+startBooking(2, "13b81c3f40dcf835f612f2c00ff1cf084893f5072e83c0e8c6d13d5ded236095")
