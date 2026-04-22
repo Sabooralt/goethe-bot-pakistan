@@ -1,217 +1,156 @@
-import startBooking from "../booking/book";
 import { bot } from "..";
+import Account, { AccountDocument } from "../models/accountSchema";
+import { browserPool, PrewarmedBrowser } from "../browser/prewarmed-browser-pool";
 import Schedule from "../models/scheduleSchema";
 import { UserDocument } from "../models/userSchema";
-import dotenv from "dotenv";
-import { browserPool } from "../browser/prewarmed-browser-pool";
+import startBooking from "../booking/book";
 
-dotenv.config();
-
-interface DisplayInfo {
-  display: string;
-  displayNumber: string;
-  noVncUrl: string;
-  vncPort: number;
+interface BrowserAccountAssignment {
+  browserNumber: number;
+  account: AccountDocument;
+  browser: PrewarmedBrowser;
 }
 
-/**
- * OPTIMIZED: Use prewarmed browsers and redirect them in PARALLEL
- */
-export const runAllAccountsWithPrewarmedBrowsers = async (
-  oid: string,
-  scheduleId?: string
-) => {
-  const startTime = Date.now();
-  console.log(`⚡REDIRECTING PREWARMED BROWSERS - OID: ${oid}`);
+const getAccountsForSchedule = async (scheduleId: string): Promise<AccountDocument[]> => {
+  const schedule = await Schedule.findById(scheduleId).populate("createdBy");
+  if (!schedule) throw new Error(`Schedule ${scheduleId} not found`);
 
-  let user: UserDocument | null = null;
+  const user = schedule.createdBy as unknown as UserDocument;
+  const userId = user._id.toString();
 
-  // Get user for notifications
-  if (scheduleId) {
-    try {
-      const schedule = await Schedule.findById(scheduleId).populate(
-        "createdBy"
-      );
-      user = schedule?.createdBy as unknown as UserDocument;
-    } catch (err) {
-      console.error("Failed to get user:", err);
-    }
+  const accounts = await Account.find({
+    user: userId,
+    status: true,
+  }).populate("user");
+
+  console.log(`[cluster] Found ${accounts.length} active accounts for user ${userId}`);
+  return accounts;
+};
+
+const assignAccountsToBrowsers = (
+  browsers: PrewarmedBrowser[],
+  accounts: AccountDocument[]
+): BrowserAccountAssignment[] => {
+  const assignments: BrowserAccountAssignment[] = [];
+
+  // Each browser gets one unique account — stop at whichever runs out first
+  const count = Math.min(browsers.length, accounts.length);
+
+  if (accounts.length < browsers.length) {
+    console.warn(
+      `[cluster] Only ${accounts.length} accounts for ${browsers.length} browsers — ${browsers.length - accounts.length} browsers will be unused`
+    );
   }
 
-  const sendLog = (message: string) => {
-    if (user?.telegramId) {
-      setImmediate(() => {
-        bot.sendMessage(user!.telegramId, message).catch(() => { });
-      });
-    }
-  };
-
-  const bookingUrl = `https://www.goethe.de/coe?lang=en&oid=${oid}`;
-
-  // Get all prewarmed browsers
-  const prewarmedBrowsers = browserPool.getAllReadyBrowsers();
-
-  if (prewarmedBrowsers.length === 0) {
-    console.error("❌ No prewarmed browsers available!");
-    sendLog(
-      `❌ **No Browsers Ready**\n\n` +
-      `No prewarmed browsers found. Please ensure browsers are warmed up before OID detection.`
+  for (let i = 0; i < count; i++) {
+    assignments.push({
+      browserNumber: browsers[i].browserNumber,
+      account: accounts[i],
+      browser: browsers[i],
+    });
+    console.log(
+      `[cluster] Browser ${browsers[i].browserNumber} -> ${accounts[i].email}`
     );
+  }
+
+  return assignments;
+};
+
+export const runAllAccountsWithPrewarmedBrowsers = async (
+  oid: string,
+  scheduleId: string
+): Promise<void> => {
+  console.log(`[cluster] Starting booking for OID: ${oid}`);
+
+  const schedule = await Schedule.findById(scheduleId).populate("createdBy");
+  if (!schedule) throw new Error(`Schedule ${scheduleId} not found`);
+
+  const user = schedule.createdBy as unknown as UserDocument;
+
+  // Step 1: Get accounts
+  let accounts: AccountDocument[];
+  try {
+    accounts = await getAccountsForSchedule(scheduleId);
+  } catch (error) {
+    console.error("[cluster] Failed to fetch accounts:", error);
+    if (user.telegramId) {
+      await bot.sendMessage(
+        user.telegramId,
+        `[cluster] Failed to fetch accounts: ${(error as Error).message}`
+      );
+    }
     return;
   }
 
-  console.log(
-    `🔥 Found ${prewarmedBrowsers.length} prewarmed browsers ready to redirect`
-  );
-
-
-
-  // Navigate ALL browsers in PARALLEL
-  console.log(
-    `🌐 Redirecting ${prewarmedBrowsers.length} browsers in PARALLEL...`
-  );
-
-  const navigationPromises = prewarmedBrowsers.map((browser) =>
-    navigateAndStartBooking(browser, bookingUrl, oid, scheduleId)
-  );
-
-  const navResults = await Promise.allSettled(navigationPromises);
-
-  let navSuccessCount = 0;
-  navResults.forEach((result, index) => {
-    if (result.status === "fulfilled" && result.value) {
-      navSuccessCount++;
-      console.log(`✅ Browser ${index + 1} redirected successfully`);
-    } else {
-      console.error(`❌ Browser ${index + 1} failed to redirect`);
+  if (accounts.length === 0) {
+    console.error("[cluster] No active accounts found");
+    if (user.telegramId) {
+      await bot.sendMessage(
+        user.telegramId,
+        `[cluster] No active accounts found. Cannot proceed with booking.`
+      );
     }
-  });
-
-  const totalTime = Date.now() - startTime;
-  console.log(
-    `🎯 Total redirect time: ${totalTime}ms, ${navSuccessCount}/${prewarmedBrowsers.length} successful`
-  );
-
-  sendLog(
-    `✅ **Browsers Redirected**\n\n` +
-    `📊 Success: ${navSuccessCount}/${prewarmedBrowsers.length}\n` +
-    `⚡ Total time: ${totalTime}ms\n` +
-    `🎯 Booking process started on all browsers!`
-  );
-
-  // Update schedule status
-  if (scheduleId) {
-    setImmediate(async () => {
-      try {
-        await Schedule.findByIdAndUpdate(scheduleId, {
-          completed: true,
-          status: navSuccessCount > 0 ? "success" : "failed",
-          lastRun: new Date(),
-          lastError:
-            navSuccessCount === 0 ? "All browsers failed to reach page" : null,
-        });
-      } catch (error) {
-        console.error("Failed to update schedule:", error);
-      }
-    });
+    return;
   }
 
-  // Browsers will remain open for 5 hours as handled by book.ts
-};
-
-async function navigateAndStartBooking(
-  browser: any,
-  bookingUrl: string,
-  oid: string,
-  scheduleId?: string
-): Promise<boolean> {
-  try {
-    console.log(
-      `🌐 Browser ${browser.browserNumber}: Redirecting to ${bookingUrl}...`
-    );
-
-    // Navigate to the OID URL - prewarmed browser already has page ready
-    await browser.page.goto(bookingUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 60000,
-    });
-
-    console.log(`✅ Browser ${browser.browserNumber}: Reached booking page`);
-
-    // Get chatId for notifications
-    let chatId: string | null = null;
-    if (scheduleId) {
-      try {
-        const schedule = await Schedule.findById(scheduleId).populate(
-          "createdBy"
-        );
-        const user = schedule?.createdBy as unknown as UserDocument;
-        chatId = user?.telegramId || null;
-      } catch (err) {
-        console.error("Failed to get user:", err);
-      }
+  // Step 2: Get ready browsers
+  const readyBrowsers = browserPool.getAllReadyBrowsers();
+  if (readyBrowsers.length === 0) {
+    console.error("[cluster] No prewarmed browsers available");
+    if (user.telegramId) {
+      await bot.sendMessage(
+        user.telegramId,
+        `[cluster] No prewarmed browsers available. Cannot proceed.`
+      );
     }
+    return;
+  }
 
-    // Create displayInfo from prewarmed browser
-    const displayInfo: DisplayInfo = {
+  console.log(`[cluster] ${readyBrowsers.length} browsers, ${accounts.length} accounts`);
+
+  // Step 3: Assign — one account per browser, no duplicates
+  const assignments = assignAccountsToBrowsers(readyBrowsers, accounts);
+
+  if (user.telegramId) {
+    await bot.sendMessage(
+      user.telegramId,
+      `[cluster] Launching ${assignments.length} browsers\nOID: ${oid}`
+    );
+  }
+
+  // Step 4: Launch all in parallel — never close browsers on failure
+  const bookingPromises = assignments.map(({ browserNumber, account, browser }) => {
+    const displayInfo = {
       display: browser.display,
       displayNumber: browser.display.replace(":", ""),
-      noVncUrl: `http://${process.env.SERVER_IP || "localhost"}:${6080 + parseInt(browser.display.replace(":", ""))
-        }/vnc.html`,
+      noVncUrl: `http://localhost:${6080 + parseInt(browser.display.replace(":", ""))}`,
       vncPort: 5900 + parseInt(browser.display.replace(":", "")),
     };
 
-    // Pass to book.ts - it will handle everything and keep browser alive for 5 hours
-    await startBooking(
+    return startBooking(
       browser.page,
-      browser.browserNumber,
       oid,
       bot,
       displayInfo,
-      chatId
-    );
-
-    return true;
-  } catch (error) {
-    console.error(
-      `❌ Browser ${browser.browserNumber}: Redirect failed:`,
-      error
-    );
-
-    // Even on error, try to pass to book.ts - it will handle retries
-    try {
-      let chatId: string | null = null;
-      if (scheduleId) {
-        const schedule = await Schedule.findById(scheduleId).populate(
-          "createdBy"
-        );
-        const user = schedule?.createdBy as unknown as UserDocument;
-        chatId = user?.telegramId || null;
-      }
-
-      const displayInfo: DisplayInfo = {
-        display: browser.display,
-        displayNumber: browser.display.replace(":", ""),
-        noVncUrl: `http://${process.env.SERVER_IP || "localhost"}:${6080 + parseInt(browser.display.replace(":", ""))
-          }/vnc.html`,
-        vncPort: 5900 + parseInt(browser.display.replace(":", "")),
-      };
-
-      await startBooking(
-        browser.page,
-        browser.browserNumber,
-        oid,
-        bot,
-        displayInfo,
-        chatId
-      );
-    } catch (bookingError) {
+      user.telegramId,
+      account,
+    ).catch((error) => {
+      // Catch at cluster level too — browser must never close
       console.error(
-        `❌ Browser ${browser.browserNumber}: Failed to start booking:`,
-        bookingError
+        `[cluster] Browser ${browserNumber} (${account.email}) unhandled error:`,
+        (error as Error).message
       );
-    }
+      if (user.telegramId) {
+        bot.sendMessage(
+          user.telegramId,
+          `[Browser ${browserNumber}] [${account.email}] Unhandled error: ${(error as Error).message}\nAccess manually at: ${displayInfo.noVncUrl}`
+        );
+      }
+    });
+  });
 
-    return false;
-  }
-}
+  // Wait for all — browsers stay open regardless
+  await Promise.allSettled(bookingPromises);
+
+  console.log(`[cluster] All booking attempts completed for OID: ${oid}`);
+};

@@ -318,15 +318,7 @@ class ExamScheduler {
         `⚡ Using runCluster to redirect prewarmed browsers to OID ${oid}`
       );
 
-      if (user.telegramId) {
-        await bot.sendMessage(
-          user.telegramId,
-          `**Launching Browsers**\n\n` +
-          ` Redirecting all prewarmed browsers to booking page in parallel...\n` +
-          `🆔 OID: ${oid}`,
-          { parse_mode: "Markdown" }
-        );
-      }
+
 
       // Use runCluster which handles parallel navigation and booking
       await runAllAccountsWithPrewarmedBrowsers(oid, scheduleId);
