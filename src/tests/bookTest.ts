@@ -163,7 +163,8 @@ const startBooking = async (
 
   if (browserNumber) {
     args.push(
-      `--display=:${browserNumber}`
+      `--display=:${browserNumber}`,
+      "--window-size=1280,720",
     )
   }
 
@@ -184,10 +185,8 @@ const startBooking = async (
 
   const page = await browser.newPage();
 
-  const width = 1920 + Math.floor(Math.random() * 120);
-  const height = 1080 + Math.floor(Math.random() * 80);
-  await page.setViewport({ width, height });
-
+  await page.setViewport({ width: 1280, height: 720 });
+  
   if (proxy && proxy.username && proxy.password) {
     await page.authenticate({
       username: proxy.username,
