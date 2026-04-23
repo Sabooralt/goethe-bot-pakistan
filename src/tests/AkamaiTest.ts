@@ -1,13 +1,15 @@
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import fs from "fs";
+import dotenv from "dotenv";
 
+dotenv.config();
 puppeteer.use(StealthPlugin());
 
 async function run() {
-    const proxyHost = "pr.oxylabs.io:7777";
-    const username = "customer-Ashon_UbFVW-cc-US";
-    const password = "Ashon+482001";
+    const proxyHost = process.env.GERMANY_PROXY_HOST;
+    const username = process.env.GERMANY_PROXY_USERNAME;
+    const password = process.env.GERMANY_PROXY_PASSWORD;
 
     const browser = await puppeteer.launch({
         headless: false,
@@ -17,7 +19,7 @@ async function run() {
             display: ":2",
         },
         args: [
-           
+            `--proxy-server=${proxyHost}`,
             "--no-sandbox",
             "--disable-setuid-sandbox",
             "--display=:2",
@@ -29,14 +31,21 @@ async function run() {
     const page = await browser.newPage();
 
     // Proxy authentication
-   
+
+    if (username && password) {
+        await page.authenticate({
+            username: username,
+            password: password,
+        })
+    }
+
 
     const width = 1920 + Math.floor(Math.random() * 120);
     const height = 1080 + Math.floor(Math.random() * 80);
     await page.setViewport({ width, height });
-    
 
-    const url = "https://www.goethe.de/ins/pk/en/spr/prf/gzb2.cfm";
+
+    const url = "https://www.goethe.de/ins/pk/en/spr/prf/gzsd2.cfm";
 
     console.log("[browser] Opening page...");
     await page.goto(url, {

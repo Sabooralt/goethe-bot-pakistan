@@ -3,6 +3,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { Browser, Page } from "puppeteer";
 import dotenv from "dotenv";
 import { proxyPool } from "../proxyPool";
+import { browserArgs } from "../utils/browserArgs";
 dotenv.config();
 
 const USE_PROXIES = process.env.USE_PROXIES;
@@ -11,7 +12,7 @@ puppeteer.use(StealthPlugin());
 
 const TARGET_URL =
   process.env.TARGET_URL ||
-  "https://www.goethe.de/ins/pk/en/spr/prf/gzb2.cfm";
+  "https://www.goethe.de/ins/pk/en/spr/prf/gzsd2.cfm";
 
 interface ExamModule {
   date: string;
@@ -80,52 +81,40 @@ class ExamMonitor {
   private async launchBrowser(): Promise<boolean> {
     try {
       console.log("[browser] Launching browser");
+      const proxyHost = process.env.GERMANY_PROXY_HOST;
+      const username = process.env.GERMANY_PROXY_USERNAME;
+      const password = process.env.GERMANY_PROXY_PASSWORD;
 
-      let proxy: any = null;
-      let proxyUrl = "";
-      if (USE_PROXIES) {
-        proxy = proxyPool.getNextProxy();
-        if (proxy) {
-          proxyUrl = `${proxy.host}:${proxy.port}`;
-          console.log(`Proxy ${proxyUrl} → Browser 1`);
-        }
-      }
 
-      const browserArgs = [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-
-      ]
-      if (proxy) {
-        browserArgs.push(
-          `--proxy-server=${proxy.type}://${proxy.host}:${proxy.port}`
-        );
-      }
       this.browser = await puppeteer.launch({
-        headless: true,
+        headless: false,
         executablePath: "/usr/bin/google-chrome",
         userDataDir: "./profile",
-        args: browserArgs,
+        env: {
+          DISPLAY: ":2"
+        },
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          `--proxy-server=${proxyHost}`,
+        ],
+        defaultViewport: null,
       });
+
       this.page = await this.browser.newPage();
-      if (proxy && proxy.username && proxy.password) {
+
+      const width = 1920 + Math.floor(Math.random() * 120);
+      const height = 1080 + Math.floor(Math.random() * 80);
+      await this.page.setViewport({ width, height });
+
+      if (username && password) {
         await this.page.authenticate({
-          username: proxy.username,
-          password: proxy.password,
-        });
+          username: username,
+          password: password,
+        })
       }
 
-
-      await this.page.setRequestInterception(true);
-
-      this.page.on("request", (req: any) => {
-        const resourceType = req.resourceType();
-        if (["image", "font", "media"].includes(resourceType)) {
-          req.abort();
-        } else {
-          req.continue();
-        }
-      });
+      await new Promise((res) => setTimeout(res, 3521));
 
       console.log("[browser] Browser launched");
       return true;
