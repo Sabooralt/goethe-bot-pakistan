@@ -104,23 +104,24 @@ class PrewarmedBrowserPool {
             await page.setDefaultNavigationTimeout(180000);
             await page.setDefaultTimeout(180000);
 
-            // Minimal request interception for speed
-            await page.setRequestInterception(true);
-            page.on("request", (req) => {
-                const resourceType = req.resourceType();
-                // Only block heavy resources
-                if (
-                    resourceType === "image" ||
-                    resourceType === "media" ||
-                    resourceType === "font"
-                ) {
-                    req.abort();
-                } else {
-                    req.continue();
-                }
+
+
+            await page.evaluateOnNewDocument(() => {
+                localStorage.setItem("uc_gcm", JSON.stringify({
+                    adsDataRedaction: true,
+                    adPersonalization: "denied",
+                    adStorage: "denied",
+                    adUserData: "denied",
+                    analyticsStorage: "denied",
+                }));
+                localStorage.setItem("uc_ui_version", "3.73.0");
+                localStorage.setItem("uc_user_interaction", "true");
+                localStorage.setItem("uc_settings", JSON.stringify({
+                    controllerId: "42e213448633d19d017343f77368ef4ab462b0ca1fb10607c313393260b08f21",
+                    id: "rTbKQ4Qc-",
+                    services: [],
+                }));
             });
-
-
 
             console.log(`✅ Pre-warmed browser ${browserNumber}`);
 

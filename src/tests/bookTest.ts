@@ -6,6 +6,20 @@ import dotenv from "dotenv";
 import { Page } from "puppeteer";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
 import { browserArgs } from "../utils/browserArgs";
+import { selectAvailableModules } from "../fillers/selectAllModules";
+import { handleBookingConflict } from "../fillers/handleBookingConflict";
+
+
+const MOCK_ACCOUNT = {
+  email: "alisahar0726@gmail.com",
+  password: "0565564284Aas!!",
+  modules: {
+    read: true,
+    hear: true,
+    write: false,
+    speak: false,
+  },
+};
 
 dotenv.config();
 
@@ -186,7 +200,7 @@ const startBooking = async (
   const page = await browser.newPage();
 
   await page.setViewport({ width: 1280, height: 720 });
-  
+
   if (proxy && proxy.username && proxy.password) {
     await page.authenticate({
       username: proxy.username,
@@ -228,6 +242,71 @@ const startBooking = async (
       );
 
 
+      const availableModules = await selectAvailableModules(page, MOCK_ACCOUNT.modules);
+      if (!availableModules) {
+        console.log(
+          `⚠️ Required modules not available — stopping automation`
+        );
+        await delay(1800000);
+        return;
+      }
+
+
+
+      await page.waitForSelector("button.cs-button--arrow_next", { visible: true });
+      await page.click("button.cs-button--arrow_next");
+      console.log(`✅ Clicked next`);
+
+      await page.waitForNavigation({ waitUntil: "domcontentloaded" });
+
+      await page.waitForSelector("button.cs-layer__button--high", { visible: true });
+      const bookForButtons = await page.$$("button.cs-layer__button--high");
+      await bookForButtons[1]?.click();
+      console.log(`✅ Clicked book for me`);
+
+      await page.waitForNavigation({ waitUntil: "domcontentloaded" });
+
+      // Login
+      await page.waitForSelector("#username", { visible: true });
+      await page.type("#username", MOCK_ACCOUNT.email);
+      await page.type("#password", MOCK_ACCOUNT.password);
+      await page.click('input[type="submit"][name="submit"]');
+
+      try {
+        await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 20000 });
+      } catch {
+        console.log(
+          `❌ Login failed or timed out — check credentials\nComplete manually`
+        );
+        await delay(1800000);
+        return;
+      }
+
+      const bookingConflict = await handleBookingConflict(page);
+
+      await page.click("button.cs-button--arrow_next");
+      try {
+        await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 5000 });
+      } catch {
+        console.log(` ℹ️ No navigation after DOB step (skipped)`);
+      }
+
+      await page.click("button.cs-button--arrow_next");
+      await page.waitForNavigation({ waitUntil: "networkidle2" });
+
+      if (bookingConflict) {
+        await page.click("button.cs-button--arrow_next");
+        await page.waitForNavigation({ waitUntil: "networkidle2" });
+      }
+
+      console.log(`✅ Reached payment page`);
+
+      console.log(
+        `✅ *Redirected to payment page!*\n\n💳 Review details and complete payment manually\n⏳ ~30 min before session expires\n`
+      );
+
+      await delay(1800000);
+
 
       // Keep browser open indefinitely for manual booking
       console.log(
@@ -240,7 +319,7 @@ const startBooking = async (
       // Page not loaded correctly - get current state for logging
       const currentTitle = await page.title();
       console.log(
-        `⚠️ Browser ${browserNumber}: Page not loaded correctly. Title: "${currentTitle}"`
+        `⚠️ Browser ${browserNumber}: Page not loaded correctly.Title: "${currentTitle}"`
       );
 
 
@@ -248,7 +327,7 @@ const startBooking = async (
 
     // STEP 2: START RETRY LOOP - Page didn't load correctly or rate limited
     console.log(
-      `🔄 Browser ${browserNumber}: Starting 5-hour retry loop with rate limit handling...`
+      `🔄 Browser ${browserNumber}: Starting 5 - hour retry loop with rate limit handling...`
     );
 
     let attempts = 0;
@@ -274,7 +353,8 @@ const startBooking = async (
         console.log(
           `🕐 Browser ${browserNumber}: Rate limited ${consecutiveRateLimits} times, backing off for ${Math.round(
             retryDelay / 1000
-          )}s...`
+          )
+          }s...`
         );
       }
 
@@ -301,7 +381,7 @@ const startBooking = async (
           );
 
           console.log(
-            `🚫 Browser ${browserNumber}: Rate limited! (${consecutiveRateLimits} consecutive, ${totalRateLimits} total)`
+            `🚫 Browser ${browserNumber}: Rate limited!(${consecutiveRateLimits} consecutive, ${totalRateLimits} total)`
           );
 
           // Notify on rate limits
@@ -329,7 +409,7 @@ const startBooking = async (
           // Notify every 20 attempts
           if (attempts % 20 === 0) {
             console.log(
-              `⚠️ Browser ${browserNumber}: Still seeing error (attempt ${attempts}): ${retryPageTitle}`
+              `⚠️ Browser ${browserNumber}: Still seeing error(attempt ${attempts}): ${retryPageTitle} `
             );
 
           }
@@ -351,7 +431,7 @@ const startBooking = async (
         return;
       } catch (navError) {
         console.error(
-          `❌ Browser ${browserNumber}: Navigation error (attempt ${attempts}):`,
+          `❌ Browser ${browserNumber}: Navigation error(attempt ${attempts}): `,
           (navError as Error).message
         );
 
@@ -362,7 +442,7 @@ const startBooking = async (
       }
     }
   } catch (err) {
-    console.error(`❌ Browser ${browserNumber}: Unexpected error:`, err);
+    console.error(`❌ Browser ${browserNumber}: Unexpected error: `, err);
 
     await delay(1800000);
   }
