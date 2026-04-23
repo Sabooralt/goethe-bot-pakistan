@@ -15,7 +15,9 @@
       "availableSeats": 30,
       "price": 15000,
       "currency": "PKR",
-      "status": "upcoming"
+      "status": "upcoming",
+      "oid": "50a31a451b5c172332460475f84c4a09e75fa2e5cdc3a329111d3b91105889be",
+      "bookFromStamp": "2026-04-23T15:50:33.542Z"
     },
     {
       "examId": "EXAM002",
