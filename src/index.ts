@@ -86,7 +86,7 @@ app.post("/api/trigger-booking", async (req: Request, res: Response) => {
     const mockData = await readMockData();
 
     const oid =
-      "13b81c3f40dcf835f612f2c00ff1cf084893f5072e83c0e8c6d13d5ded236095";
+      "50a31a451b5c172332460475f84c4a09e75fa2e5cdc3a329111d3b91105889be";
     const examIndex = 0;
 
     // Generate OID if not provided
