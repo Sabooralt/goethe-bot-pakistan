@@ -2,8 +2,7 @@ import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { Browser, Page } from "puppeteer";
 import dotenv from "dotenv";
-import { proxyPool } from "../proxyPool";
-import { browserArgs } from "../utils/browserArgs";
+
 dotenv.config();
 
 const USE_PROXIES = process.env.USE_PROXIES;
@@ -77,44 +76,75 @@ class ExamMonitor {
   private pollCount = 0;
   private startTime: Date | null = null;
   private lastApiCallDuration = 0;
+  private pollsOnCurrentIp = 0;
+  private readonly MAX_POLLS_PER_IP = 2;
 
   private async launchBrowser(): Promise<boolean> {
     try {
       console.log("[browser] Launching browser");
+
       const proxyHost = process.env.GERMANY_PROXY_HOST;
       const username = process.env.GERMANY_PROXY_USERNAME;
       const password = process.env.GERMANY_PROXY_PASSWORD;
 
+      // Generate unique session ID for each launch = new IP each time
+      const sessionId = Math.floor(Math.random() * 1000000);
+      const rotatingUsername = username
+        ? `${username}-sessid-${sessionId}-sesstime-2`
+        : undefined;
+
+      console.log(`[browser] Using proxy session: ${sessionId}`);
 
       this.browser = await puppeteer.launch({
         headless: false,
         executablePath: "/usr/bin/google-chrome",
-        userDataDir: "./profile",
-        env: {
-          DISPLAY: ":2"
-        },
+        userDataDir: `./profile_${sessionId}`, // fresh profile = fresh fingerprint
+        env: { DISPLAY: ":2" },
         args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          `--proxy-server=${proxyHost}`,
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          ...(proxyHost ? [`--proxy-server=http://${proxyHost}`] : []),
         ],
         defaultViewport: null,
       });
 
       this.page = await this.browser.newPage();
+      await this.page.setViewport({ width: 1280, height: 720 });
 
-      const width = 1920 + Math.floor(Math.random() * 120);
-      const height = 1080 + Math.floor(Math.random() * 80);
-      await this.page.setViewport({ width, height });
-
-      if (username && password) {
+      if (rotatingUsername && password) {
         await this.page.authenticate({
-          username: username,
-          password: password,
-        })
+          username: rotatingUsername,
+          password,
+        });
       }
 
-      await new Promise((res) => setTimeout(res, 3521));
+      await this.page.setRequestInterception(true);
+      this.page.on("request", (req: any) => {
+        const url = req.url();
+        const type = req.resourceType();
+
+        if (url.includes("QmiTVW") || url.includes("phtK") || url.includes("akam")) {
+          console.log(`[request] Blocked Akamai sensor: ${url.substring(0, 80)}`);
+          req.abort();
+          return;
+        }
+
+        // Never block the examfinder API call
+        if (url.includes("examfinder")) {
+          console.log(`[request] Allowing examfinder: ${url.substring(0, 80)}`);
+          req.continue();
+          return;
+        }
+
+        if (["image", "font", "media", "stylesheet"].includes(type)) {
+          req.abort();
+          return;
+        }
+
+        req.continue();
+      });
+
+
 
       console.log("[browser] Browser launched");
       return true;
@@ -214,7 +244,6 @@ class ExamMonitor {
   }
 
   private async browserApiCall(): Promise<ApiResponse | null> {
-
     if (process.env.TEST_MODE === "true" && this.apiUrl?.includes("localhost")) {
       try {
         const res = await fetch(this.apiUrl);
@@ -229,65 +258,76 @@ class ExamMonitor {
         return null;
       }
     }
-    if (!this.apiUrl || !this.page) return null;
+
+    if (!this.page) return null;
 
     const startTime = Date.now();
 
-    try {
-      const result = await this.page.evaluate(async (fetchUrl: string) => {
-        try {
-          const response = await fetch(fetchUrl, {
-            method: "GET",
-            credentials: "include",
-            headers: {
-              Accept: "application/json",
-              "Cache-Control": "no-cache",
-            },
-          });
+    return new Promise(async (resolve) => {
+      let resolved = false;
 
-          if (!response.ok) return { error: response.status, data: null };
-
-          const data = await response.json();
-          return { error: null, data };
-        } catch (err: any) {
-          return { error: err.message, data: null };
+      const done = (data: ApiResponse | null) => {
+        if (resolved) return;
+        resolved = true;
+        this.page!.off("response", handler);
+        this.lastApiCallDuration = Date.now() - startTime;
+        if (data) {
+          this.consecutiveErrors = 0;
+          this.lastSuccessfulPoll = new Date();
+        } else {
+          this.consecutiveErrors++;
         }
-      }, this.apiUrl);
+        resolve(data);
+      };
 
-      this.lastApiCallDuration = Date.now() - startTime;
+      const handler = async (response: any) => {
+        const url = response.url();
+        if (url.includes("examfinder")) {
+          const status = response.status();
+          console.log(`[api] Intercepted examfinder — status: ${status}`);
+          if (status === 403) {
+            console.warn("[api] 403 detected — flagging for IP rotation");
+            this.consecutiveErrors = this.maxConsecutiveErrors; // force rotation on next cycle
+            done(null);
+            return;
+          }
+          if (status !== 200) {
+            done(null);
+            return;
+          }
+          try {
+            const data = await response.json();
+            done(data);
+          } catch {
+            done(null);
+          }
+        }
+      };
 
-      if (result.error) {
-        console.warn(`[api] Fetch error: ${result.error}`);
-        this.consecutiveErrors++;
-        return null;
+      this.page!.on("response", handler);
+
+      setTimeout(() => {
+        console.warn("[api] Intercept timeout — examfinder never fired");
+        done(null);
+      }, 15000);
+
+      try {
+        await this.page!.reload({
+          waitUntil: "domcontentloaded",
+          timeout: 10000,
+        });
+      } catch {
+        // timeout ok — examfinder fires before domcontentloaded
       }
-
-      this.consecutiveErrors = 0;
-      this.lastSuccessfulPoll = new Date();
-      return result.data;
-    } catch (error) {
-      this.lastApiCallDuration = Date.now() - startTime;
-      this.consecutiveErrors++;
-      console.error("[api] browserApiCall error:", error);
-      return null;
-    }
+    });
   }
 
-  private async checkAndRecaptureApiUrl(): Promise<boolean> {
+  private async checkAndRecaptureApiUrl(rotateIp: () => Promise<boolean>): Promise<boolean> {
     if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
-      console.warn(`[poll] ${this.consecutiveErrors} consecutive errors, recapturing API URL`);
-      await this.closeBrowser();
-      this.apiUrl = null;
-
-      const newUrl = await this.captureApiUrl(5, 3000);
-      if (newUrl) {
-        console.log("[poll] API URL recaptured successfully");
-        this.consecutiveErrors = 0;
-        return true;
-      }
-
-      console.error("[poll] Failed to recapture API URL");
-      return false;
+      console.warn(`[poll] ${this.consecutiveErrors} consecutive errors — rotating IP`);
+      const rotated = await rotateIp();
+      if (!rotated) return false;
+      return true;
     }
     return true;
   }
@@ -336,6 +376,7 @@ class ExamMonitor {
     this.consecutiveErrors = 0;
     this.lockedExam = null;
     this.pollCount = 0;
+    this.pollsOnCurrentIp = 0; // reset
     this.startTime = new Date();
 
     if (!this.apiUrl) {
@@ -358,6 +399,7 @@ class ExamMonitor {
     console.log(`[startPolling] Target (PKT): ${targetDatePKT.toISOString()}`);
     console.log(`[startPolling] bookFrom date: ${targetBookFromDate}`);
     console.log(`[startPolling] Priority locations: ${priorityLocations.join(", ")}`);
+    console.log(`[startPolling] IP rotation every ${this.MAX_POLLS_PER_IP} polls`);
 
     this.isPolling = true;
 
@@ -367,6 +409,29 @@ class ExamMonitor {
       if (onTimeout) await onTimeout();
       this.stopPolling();
     }, maxDurationMs);
+
+    const rotateIp = async (): Promise<boolean> => {
+      console.log(`[poll] Rotating IP after ${this.pollsOnCurrentIp} polls`);
+      await this.closeBrowser();
+      this.apiUrl = null;
+
+      try {
+        const { execSync } = await import("child_process");
+        execSync("rm -rf ./profile_*");
+        console.log("[poll] Cleaned up old profiles");
+      } catch { }
+
+      const newUrl = await this.captureApiUrl(5, 3000);
+      if (!newUrl) {
+        console.error("[poll] Failed to rotate IP");
+        return false;
+      }
+
+      this.pollsOnCurrentIp = 0;
+      this.consecutiveErrors = 0;
+      console.log("[poll] ✅ IP rotated successfully");
+      return true;
+    };
 
     const rapidPoll = async () => {
       if (this.shouldStopPolling) {
@@ -379,7 +444,9 @@ class ExamMonitor {
         return;
       }
 
-      const canContinue = await this.checkAndRecaptureApiUrl();
+
+
+      const canContinue = await this.checkAndRecaptureApiUrl(rotateIp);
       if (!canContinue) {
         this.stopPolling();
         if (onTimeout) await onTimeout();
@@ -388,9 +455,11 @@ class ExamMonitor {
 
       try {
         this.pollCount++;
+        this.pollsOnCurrentIp++;
 
         const data = await this.browserApiCall();
         console.log(`[poll] Raw data:`, JSON.stringify(data)?.substring(0, 200));
+
         if (!data?.DATA || !Array.isArray(data.DATA)) {
           if (this.pollCount % 10 === 0) {
             console.log(`[poll] No data returned (${this.pollCount} polls)`);
@@ -400,7 +469,6 @@ class ExamMonitor {
         }
 
         if (this.lockedExam) {
-          // Find our specific locked exam
           const lockedExam = data.DATA.find(
             (exam: ExamData) =>
               exam.locationName === this.lockedExam!.locationName &&
@@ -411,10 +479,13 @@ class ExamMonitor {
           if (lockedExam) {
             if (lockedExam.oid && !this.processedOids.has(lockedExam.oid)) {
               const elapsed = this.startTime ? Date.now() - this.startTime.getTime() : 0;
-              console.log(`[poll] OID detected in ${elapsed}ms`);
+              console.log(`\n${"=".repeat(50)}`);
+              console.log(`[poll] ✅ OID DETECTED`);
               console.log(`[poll] OID: ${lockedExam.oid}`);
               console.log(`[poll] Location: ${lockedExam.locationName || "unknown"}`);
+              console.log(`[poll] Detected in: ${elapsed}ms`);
               console.log(`[poll] Poll count: ${this.pollCount}`);
+              console.log(`${"=".repeat(50)}\n`);
 
               this.processedOids.add(lockedExam.oid);
               this.processingOid = true;
@@ -436,14 +507,14 @@ class ExamMonitor {
               console.log(`[poll] Waiting for OID (${this.pollCount} polls)`);
             }
           } else {
-            console.log(`[poll] Locked exam disappeared, resuming scan`);
+            console.log(`[poll] Locked exam disappeared — resuming scan`);
             this.lockedExam = null;
           }
         } else {
-          // Scan for matching exam
           const matchingExams = data.DATA.filter(
             (exam: ExamData) => exam.bookFrom === targetBookFromDate
           );
+
           if (matchingExams.length > 0) {
             const exam = this.prioritizeExams(matchingExams, priorityLocations)[0];
 
@@ -455,19 +526,21 @@ class ExamMonitor {
               bookFromTime: exam.bookFromTime || "",
             };
 
-            console.log(`[poll] Exam locked`);
-            console.log(`[poll] Location: ${exam.locationName}`);
-            console.log(`[poll] Exam date: ${exam.startDate}`);
-            console.log(`[poll] Module ID: ${exam.moduleId}`);
+            console.log(`\n${"=".repeat(50)}`);
+            console.log(`[poll] ✅ EXAM LOCKED`);
+            console.log(`[poll] Location:      ${exam.locationName}`);
+            console.log(`[poll] Exam date:     ${exam.startDate}`);
+            console.log(`[poll] Module ID:     ${exam.moduleId}`);
             console.log(`[poll] Booking opens: ${exam.bookFrom} ${exam.bookFromTimeFormatted || exam.bookFromTime}`);
-            console.log(`[poll] Monitoring for OID`);
+            console.log(`[poll] Availability:  ${exam.availability ?? "N/A"}`);
+            console.log(`[poll] Monitoring for OID...`);
+            console.log(`${"=".repeat(50)}\n`);
 
             if (onExamFound) setImmediate(() => onExamFound(exam));
 
             if (exam.oid && !this.processedOids.has(exam.oid)) {
               const elapsed = this.startTime ? Date.now() - this.startTime.getTime() : 0;
-              console.log(`[poll] OID already present at ${elapsed}ms`);
-              console.log(`[poll] OID: ${exam.oid}`);
+              console.log(`[poll] ✅ OID already present at ${elapsed}ms: ${exam.oid}`);
 
               this.processedOids.add(exam.oid);
               this.processingOid = true;
@@ -489,7 +562,7 @@ class ExamMonitor {
           } else if (this.pollCount % 10 === 0) {
             const elapsed = this.startTime ? Date.now() - this.startTime.getTime() : 0;
             const rate = elapsed > 0 ? Math.round(this.pollCount / (elapsed / 1000)) : 0;
-            console.log(`[poll] ${new Date().toLocaleTimeString()} | Polls: ${this.pollCount} | Rate: ${rate}/s`);
+            console.log(`[poll] ${new Date().toLocaleTimeString()} | Polls: ${this.pollCount} | Rate: ${rate}/s | IP polls: ${this.pollsOnCurrentIp}/${this.MAX_POLLS_PER_IP}`);
           }
         }
 
@@ -572,6 +645,7 @@ class ExamMonitor {
     this.consecutiveErrors = 0;
     this.lockedExam = null;
     this.pollCount = 0;
+    this.pollsOnCurrentIp = 0;
     this.startTime = null;
   }
 }

@@ -20,6 +20,8 @@
     "express": "^5.1.0",
     "luxon": "^3.7.2",
     "mongoose": "^8.16.4",
+    "node-curl-impersonate": "^1.5.4",
+    "node-libcurl": "^4.1.0",
     "node-telegram-bot-api": "^0.66.0",
     "puppeteer": "^24.11.2",
     "puppeteer-cluster": "^0.24.0",
