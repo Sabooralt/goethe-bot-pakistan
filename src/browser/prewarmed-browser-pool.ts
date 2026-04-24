@@ -101,6 +101,19 @@ class PrewarmedBrowserPool {
                 });
             }
 
+            await page.setRequestInterception(true);
+            page.on("request", (req: any) => {
+                const url = req.url();
+                const type = req.resourceType();
+
+                if (url.includes("QmiTVW") || url.includes("phtK") || url.includes("akam")) {
+                    console.log(`[request] Blocked Akamai sensor: ${url.substring(0, 80)}`);
+                    req.abort();
+                    return;
+                }
+                req.continue();
+            });
+
             await page.setDefaultNavigationTimeout(180000);
             await page.setDefaultTimeout(180000);
 

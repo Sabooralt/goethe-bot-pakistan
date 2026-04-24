@@ -360,7 +360,7 @@ class ExamMonitor {
 
   async startPolling(targetDate: Date, options: PollingOptions = {}) {
     const {
-      interval = 3000,
+      interval = 1000,
       onExamFound,
       onExamWithOid,
       onTimeout,
