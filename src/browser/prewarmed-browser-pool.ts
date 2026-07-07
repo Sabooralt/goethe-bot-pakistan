@@ -5,6 +5,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { browserArgs } from "../utils/browserArgs";
 
 puppeteer.use(StealthPlugin());
+const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
 
 interface PrewarmedBrowser {
     browser: Browser;
@@ -17,7 +18,7 @@ interface PrewarmedBrowser {
 }
 
 const activeDisplays = new Set<string>();
-const displayPool: string[] = Array.from({ length: 20 }, (_, i) => `:${i + 1}`);
+const displayPool: string[] = Array.from({ length: BROWSER_COUNT }, (_, i) => `:${i + 1}`);
 
 class PrewarmedBrowserPool {
     private browsers: Map<number, PrewarmedBrowser> = new Map();
@@ -32,7 +33,7 @@ class PrewarmedBrowserPool {
                     if (!activeDisplays.has(display)) {
                         activeDisplays.add(display);
                         console.log(
-                            `📺 Allocated ${display} (${activeDisplays.size}/${displayPool.length})`
+                            `[preWarm] Allocated ${display} (${activeDisplays.size}/${displayPool.length})`
                         );
                         resolve(display);
                         return;
@@ -56,7 +57,7 @@ class PrewarmedBrowserPool {
         display: string
     ): Promise<PrewarmedBrowser | null> {
         try {
-            console.log(`🔥 Pre-warming browser ${browserNumber} on ${display}...`);
+            console.log(`[preWarm] Pre-warming browser ${browserNumber} on ${display}...`);
 
             let proxy: any = null;
             let proxyUrl = "";
@@ -64,11 +65,11 @@ class PrewarmedBrowserPool {
                 proxy = proxyPool.getNextProxy();
                 if (proxy) {
                     proxyUrl = `${proxy.host}:${proxy.port}`;
-                    console.log(`🔒 Proxy ${proxyUrl} → Browser ${browserNumber}`);
+                    console.log(`[proxy] Proxy ${proxyUrl} → Browser ${browserNumber}`);
                 }
             }
 
-            const args = browserArgs;
+            const args = [...browserArgs];
 
             if (proxy) {
                 browserArgs.push(
@@ -84,7 +85,7 @@ class PrewarmedBrowserPool {
                     DISPLAY: display,
                 },
                 args: args,
-                timeout: 3000,
+                timeout: 10000,
                 protocolTimeout: 180000,
                 defaultViewport: null,
             });
@@ -136,7 +137,7 @@ class PrewarmedBrowserPool {
                 }));
             });
 
-            console.log(`✅ Pre-warmed browser ${browserNumber}`);
+            console.log(`[preWarm] Pre-warmed browser ${browserNumber}`);
 
             return {
                 browser,
@@ -148,7 +149,7 @@ class PrewarmedBrowserPool {
                 proxyUsed: proxyUrl,
             };
         } catch (error) {
-            console.error(`❌ Pre-warm failed browser ${browserNumber}:`, error);
+            console.error(`[preWarm] Pre-warm failed browser ${browserNumber}:`, error);
             this.releaseDisplay(display);
             return null;
         }
@@ -156,14 +157,13 @@ class PrewarmedBrowserPool {
 
 
 
-    async warmup20Browsers(): Promise<void> {
+    async warmupBrowsers(): Promise<void> {
         try {
-            console.log(`🔥 Warming up 20 browsers...`);
+            console.log(`🔥 Warming up ${BROWSER_COUNT} browsers...`);
 
-            // Warm 20 browsers in parallel
             const warmupPromises = [];
 
-            for (let i = 1; i <= 20; i++) {
+            for (let i = 1; i <= BROWSER_COUNT; i++) {
                 if (this.warmingUp.has(i) || this.browsers.has(i)) {
                     continue;
                 }
@@ -184,7 +184,7 @@ class PrewarmedBrowserPool {
                         if (prewarmed) {
                             this.browsers.set(browserNumber, prewarmed);
                             console.log(
-                                `✅ Browser ${browserNumber} warmed (${this.browsers.size}/20)`
+                                `✅ Browser ${browserNumber} warmed (${this.browsers.size}/${BROWSER_COUNT})`
                             );
                         } else {
                             this.releaseDisplay(display);
@@ -201,7 +201,7 @@ class PrewarmedBrowserPool {
 
             await Promise.all(warmupPromises);
 
-            console.log(`🎉 Warming complete! ${this.browsers.size}/20 ready`);
+            console.log(`🎉 Warming complete! ${this.browsers.size}/${BROWSER_COUNT} ready`);
         } catch (error) {
             console.error(`❌ Warmup error:`, error);
         }

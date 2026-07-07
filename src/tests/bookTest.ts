@@ -188,7 +188,8 @@ const startBooking = async (
     executablePath: "/usr/bin/google-chrome",
     userDataDir: "./profile",
     env: {
-      display: `:${browserNumber}`,
+      ...process.env,
+      DISPLAY: `:${browserNumber}`,   // uppercase, and spread process.env so Chrome still gets PATH etc.
     },
     args,
     defaultViewport: null,
@@ -460,4 +461,4 @@ const startBooking = async (
   }
 };
 
-startBooking(2, "13b81c3f40dcf835f612f2c00ff1cf084893f5072e83c0e8c6d13d5ded236095")
+startBooking(2, "888f1afff77b4e3a1fec292819afabf96f7a45909ce9fe9e05ce2435eab16d3e")

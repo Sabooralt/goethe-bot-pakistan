@@ -9,6 +9,8 @@ import dotenv from "dotenv";
 import { browserPool } from "../browser/prewarmed-browser-pool";
 dotenv.config();
 
+const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
+
 interface ActiveSession {
   scheduleId: string;
   targetTime: Date;
@@ -35,7 +37,7 @@ class ExamScheduler {
       return;
     }
 
-    console.log("🚀 Starting Future Schedule Monitor (5min before UTC)...");
+    console.log("[scheduler] Starting Future Schedule Monitor (5min before UTC)...");
     this.isRunning = true;
 
     // Check every 15 seconds for schedules that need monitoring
@@ -52,7 +54,7 @@ class ExamScheduler {
       console.error("❌ Initial check failed:", error);
     });
 
-    console.log("✅ Future Schedule Monitor started");
+    console.log("[scheduler] Future Schedule Monitor started");
   }
 
   stop(): void {
@@ -162,7 +164,7 @@ class ExamScheduler {
         `🚀 **Monitoring Started**\n\n` +
         `📋 Name: ${schedule.name}\n` +
         `⏰ Scheduled: ${schedule.runAt.toLocaleString()}\n` +
-        `🔥 Warming up 20 browsers...\n` +
+        `🔥 Warming up ${BROWSER_COUNT} browsers...\n` +
         `🔍 Will start polling for exam OID...\n\n` +
         `You'll be notified when an OID is found!`,
         { parse_mode: "Markdown" }
@@ -170,9 +172,9 @@ class ExamScheduler {
     }
 
     try {
-      // Step 1: Warm up 20 browsers
-      console.log(`🔥 Warming up 20 browsers for ${schedule.name}...`);
-      await browserPool.warmup20Browsers();
+      // Step 1: Warm up browsers
+      console.log(`[scheduler] Warming up ${BROWSER_COUNT} browsers for ${schedule.name}...`);
+      await browserPool.warmupBrowsers();
 
       session.browsersPrewarmed = true;
       session.status = "monitoring";
@@ -180,7 +182,7 @@ class ExamScheduler {
       if (user.telegramId) {
         await bot.sendMessage(
           user.telegramId,
-          `✅ **20 Browsers Ready**\n\n` +
+          `✅ **${BROWSER_COUNT} Browsers Ready**\n\n` +
           `📋 ${schedule.name}\n` +
           `🔥 All browsers prewarmed and ready\n` +
           `🔍 Now polling for exam OID...`,
@@ -191,9 +193,9 @@ class ExamScheduler {
       // Step 2: Start polling for OID
       console.log(`🔍 Starting OID polling for ${schedule.name}...`);
 
-      await examMonitor.startPolling(
-        new Date("2026-04-24T10:00:00.000Z"),
-        {
+      await examMonitor.startPolling(process.env.TEST_MODE === "true" ?
+        new Date("2026-07-07T10:00:00.000Z") : schedule.runAt
+        ,{
           maxDurationMs: 5 * 60 * 60 * 1000,
 
           onExamWithOid: async (exam: ExamData) => {

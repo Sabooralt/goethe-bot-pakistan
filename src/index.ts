@@ -85,17 +85,10 @@ app.post("/api/trigger-booking", async (req: Request, res: Response) => {
   try {
     const mockData = await readMockData();
 
-    const oid =
-      "50a31a451b5c172332460475f84c4a09e75fa2e5cdc3a329111d3b91105889be";
+    const oid = process.env.TEST_OID || "50a31a451b5c172332460475f84c4a09e75fa2e5cdc3a329111d3b91105889be";
     const examIndex = 0;
 
-    // Generate OID if not provided
-    const generatedOid =
-      oid ||
-      `OID${Date.now()}${Math.random()
-        .toString(36)
-        .substr(2, 9)
-        .toUpperCase()}`;
+    
 
     // Check if exam exists
     if (!mockData.DATA[examIndex]) {
@@ -106,7 +99,7 @@ app.post("/api/trigger-booking", async (req: Request, res: Response) => {
     }
 
     // Add OID to the exam (simulate booking opening)
-    mockData.DATA[examIndex].oid = generatedOid;
+    mockData.DATA[examIndex].oid = oid;
 
     // Also add bookFromStamp to make it more realistic
     mockData.DATA[examIndex].bookFromStamp = new Date().toISOString();
@@ -116,7 +109,7 @@ app.post("/api/trigger-booking", async (req: Request, res: Response) => {
 
     console.log(`\n🎯 BOOKING TRIGGERED!`);
     console.log(`   📍 Location: ${mockData.DATA[examIndex].locationName}`);
-    console.log(`   🆔 OID: ${generatedOid}`);
+    console.log(`   🆔 OID: ${oid}`);
     console.log(`   📅 Exam Date: ${mockData.DATA[examIndex].startDate}`);
     console.log(`   🔓 Booking now open!\n`);
 
@@ -124,7 +117,7 @@ app.post("/api/trigger-booking", async (req: Request, res: Response) => {
       success: true,
       message: "Booking opened successfully",
       exam: {
-        oid: generatedOid,
+        oid: oid,
         locationName: mockData.DATA[examIndex].locationName,
         startDate: mockData.DATA[examIndex].startDate,
         bookFromStamp: mockData.DATA[examIndex].bookFromStamp,
@@ -337,9 +330,9 @@ export const bot = new TelegramBot(token, { polling: true });
       });
 
       app.listen(PORT, () => {
-        console.log(`🚀 Server is running on http://localhost:${PORT}`);
+        console.log(`[server] Server is running on http://localhost:${PORT}`);
         console.log(
-          `🩺 Health endpoint: http://localhost:${PORT}/status/health`
+          `[health] Health endpoint: http://localhost:${PORT}/status/health`
         );
       });
 
