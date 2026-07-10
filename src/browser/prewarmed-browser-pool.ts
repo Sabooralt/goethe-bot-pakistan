@@ -107,7 +107,11 @@ class PrewarmedBrowserPool {
                 const url = req.url();
                 const type = req.resourceType();
 
-                if (url.includes("QmiTVW") || url.includes("phtK") || url.includes("akam")) {
+                if (url.includes("QmiTVW") ||
+                    url.includes("phtK") ||
+                    url.includes("EBFUJX") ||
+                    url.includes("28M7sj") ||
+                    url.includes("akam")) {
                     console.log(`[request] Blocked Akamai sensor: ${url.substring(0, 80)}`);
                     req.abort();
                     return;
@@ -159,7 +163,7 @@ class PrewarmedBrowserPool {
 
     async warmupBrowsers(): Promise<void> {
         try {
-            console.log(`🔥 Warming up ${BROWSER_COUNT} browsers...`);
+            console.log(`[preWarm] Warming up ${BROWSER_COUNT} browsers...`);
 
             const warmupPromises = [];
 
@@ -201,9 +205,9 @@ class PrewarmedBrowserPool {
 
             await Promise.all(warmupPromises);
 
-            console.log(`🎉 Warming complete! ${this.browsers.size}/${BROWSER_COUNT} ready`);
+            console.log(`[preWarm] Warming complete! ${this.browsers.size}/${BROWSER_COUNT} ready`);
         } catch (error) {
-            console.error(`❌ Warmup error:`, error);
+            console.error(`[preWarm] Warmup error:`, error);
         }
     }
 
@@ -216,7 +220,7 @@ class PrewarmedBrowserPool {
         const browser = this.browsers.get(browserNumber);
 
         if (browser && browser.isReady) {
-            console.log(`⚡ INSTANT: Got pre-warmed browser ${browserNumber}`);
+            console.log(`[preWarm] Got pre-warmed browser ${browserNumber}`);
             return browser;
         }
 

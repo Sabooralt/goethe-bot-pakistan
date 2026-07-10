@@ -3,7 +3,7 @@
     {
       "examId": "EXAM001",
       "moduleId": "MOD001",
-      "locationName": "Karachi - Goethe Institute",
+      "locationName": "Mumbai - Goethe Institute",
       "locationCode": "KHI-GI",
       "language": "German",
       "level": "A1",
@@ -15,15 +15,15 @@
       "capacity": 30,
       "availableSeats": 30,
       "price": 15000,
-      "currency": "PKR",
+      "currency": "INR",
       "status": "upcoming",
       "oid": "7df92672ad012b16f92e42b80051961a4961952552618c08a9a59106da08b56f",
-      "bookFromStamp": "2026-07-07T21:54:11.368Z"
+      "bookFromStamp": "2026-07-08T00:31:48.564Z"
     },
     {
       "examId": "EXAM002",
       "moduleId": "MOD001",
-      "locationName": "Karachi - Goethe Institute",
+      "locationName": "Delhi - Goethe Institute",
       "locationCode": "KHI-GI",
       "language": "German",
       "level": "A2",
@@ -35,13 +35,13 @@
       "capacity": 25,
       "availableSeats": 25,
       "price": 18000,
-      "currency": "PKR",
+      "currency": "INR",
       "status": "upcoming"
     },
     {
       "examId": "EXAM003",
       "moduleId": "MOD001",
-      "locationName": "Lahore - Goethe Zentrum",
+      "locationName": "Bangalore - Goethe Zentrum",
       "locationCode": "LHE-GZ",
       "language": "German",
       "level": "B1",
@@ -53,43 +53,7 @@
       "capacity": 20,
       "availableSeats": 20,
       "price": 20000,
-      "currency": "PKR",
-      "status": "upcoming"
-    },
-    {
-      "examId": "EXAM004",
-      "moduleId": "MOD001",
-      "locationName": "Islamabad - Goethe Center",
-      "locationCode": "ISB-GC",
-      "language": "German",
-      "level": "B2",
-      "startDate": "2026-05-25",
-      "endDate": "2026-05-25",
-      "examTime": "13:00",
-      "bookFrom": "2026-04-30",
-      "bookFromTime": "12:00:00.000",
-      "capacity": 15,
-      "availableSeats": 15,
-      "price": 25000,
-      "currency": "PKR",
-      "status": "upcoming"
-    },
-    {
-      "examId": "EXAM005",
-      "moduleId": "MOD001",
-      "locationName": "Karachi - Goethe Institute",
-      "locationCode": "KHI-GI",
-      "language": "German",
-      "level": "C1",
-      "startDate": "2026-06-01",
-      "endDate": "2026-06-01",
-      "examTime": "09:30",
-      "bookFrom": "2026-05-05",
-      "bookFromTime": "10:30:00.000",
-      "capacity": 10,
-      "availableSeats": 10,
-      "price": 30000,
-      "currency": "PKR",
+      "currency": "INR",
       "status": "upcoming"
     }
   ]

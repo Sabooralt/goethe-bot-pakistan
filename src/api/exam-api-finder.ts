@@ -123,7 +123,11 @@ class ExamMonitor {
         const url = req.url();
         const type = req.resourceType();
 
-        if (url.includes("QmiTVW") || url.includes("phtK") || url.includes("akam")) {
+        if (url.includes("QmiTVW") ||
+          url.includes("phtK") ||
+          url.includes("EBFUJX") ||
+          url.includes("28M7sj") ||
+          url.includes("akam")) {
           console.log(`[request] Blocked Akamai sensor: ${url.substring(0, 80)}`);
           req.abort();
           return;
@@ -394,12 +398,11 @@ class ExamMonitor {
     const targetDatePKT = new Date(targetDate.getTime() + PKT_OFFSET_MS);
     const [year, month, day] = targetDatePKT.toISOString().split("T")[0].split("-");
     const targetBookFromDate = `${day}.${month}.${year}`;
+    /* 
+        console.log(`[startPolling] Target (UTC): ${targetDate.toISOString()}`);
+        console.log(`[startPolling] Target (PKT): ${targetDatePKT.toISOString()}`);
+        console.log(`[startPolling] bookFrom date: ${targetBookFromDate}`); */
 
-    console.log(`[startPolling] Target (UTC): ${targetDate.toISOString()}`);
-    console.log(`[startPolling] Target (PKT): ${targetDatePKT.toISOString()}`);
-    console.log(`[startPolling] bookFrom date: ${targetBookFromDate}`);
-    console.log(`[startPolling] Priority locations: ${priorityLocations.join(", ")}`);
-    console.log(`[startPolling] IP rotation every ${this.MAX_POLLS_PER_IP} polls`);
 
     this.isPolling = true;
 
@@ -480,7 +483,7 @@ class ExamMonitor {
             if (lockedExam.oid && !this.processedOids.has(lockedExam.oid)) {
               const elapsed = this.startTime ? Date.now() - this.startTime.getTime() : 0;
               console.log(`\n${"=".repeat(50)}`);
-              console.log(`[poll] ✅ OID DETECTED`);
+              console.log(`[poll] OID DETECTED`);
               console.log(`[poll] OID: ${lockedExam.oid}`);
               console.log(`[poll] Location: ${lockedExam.locationName || "unknown"}`);
               console.log(`[poll] Detected in: ${elapsed}ms`);

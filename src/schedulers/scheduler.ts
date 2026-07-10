@@ -95,9 +95,9 @@ class ExamScheduler {
 
       if (schedulesToMonitor.length > 0) {
         console.log(
-          `🔍 Found ${schedulesToMonitor.length} future schedule(s) ready for monitoring`
+          `[scheduler]Found ${schedulesToMonitor.length} future schedule(s) ready for monitoring`
         );
-        console.log(`📅 Current UTC: ${nowUtc.toISO()}`);
+        console.log(`[scheduler] Current UTC: ${nowUtc.toISO()}`);
       }
 
       for (const schedule of schedulesToMonitor) {
@@ -107,7 +107,7 @@ class ExamScheduler {
         const minutesUntil = scheduleTimeUtc.diff(nowUtc, "minutes").minutes;
 
         console.log(
-          `⏰ Schedule "${schedule.name
+          `[scheduler] Schedule "${schedule.name
           }" at ${scheduleTimeUtc.toISO()} (${minutesUntil.toFixed(
             1
           )} min away)`
@@ -117,7 +117,7 @@ class ExamScheduler {
           await this.startMonitoringSession(schedule);
         } catch (error) {
           console.error(
-            `❌ Failed to start monitoring for ${schedule.name}:`,
+            `[scheduler] Failed to start monitoring for ${schedule.name}:`,
             error
           );
           await this.updateScheduleWithError(
@@ -130,7 +130,7 @@ class ExamScheduler {
 
       await this.cleanupCompletedSessions();
     } catch (error) {
-      console.error("❌ Error checking future schedules:", error);
+      console.error(`[scheduler] Error checking future schedules:`, error);
     }
   }
 
@@ -138,7 +138,7 @@ class ExamScheduler {
     const scheduleId = schedule.id.toString();
     const user = schedule.createdBy as unknown as UserDocument;
 
-    console.log(`🎯 Starting monitoring session for: ${schedule.name}`);
+    console.log(`[scheduler] Starting monitoring session for: ${schedule.name}`);
 
     const session: ActiveSession = {
       scheduleId,
@@ -191,7 +191,7 @@ class ExamScheduler {
       }
 
       // Step 2: Start polling for OID
-      console.log(`🔍 Starting OID polling for ${schedule.name}...`);
+      console.log(`[examMonitor] Starting OID polling for ${schedule.name}...`);
 
       await examMonitor.startPolling(process.env.TEST_MODE === "true" ?
         new Date("2026-07-07T10:00:00.000Z") : schedule.runAt

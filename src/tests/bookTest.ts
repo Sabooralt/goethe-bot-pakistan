@@ -169,11 +169,7 @@ const startBooking = async (
 
   const args = browserArgs;
 
-  if (proxy) {
-    args.push(
-      `--proxy-server=${proxy.type}://${proxy.host}:${proxy.port}`
-    );
-  }
+ 
 
   if (browserNumber) {
     args.push(
@@ -461,4 +457,4 @@ const startBooking = async (
   }
 };
 
-startBooking(2, "888f1afff77b4e3a1fec292819afabf96f7a45909ce9fe9e05ce2435eab16d3e")
+startBooking(2, "7df92672ad012b16f92e42b80051961a4961952552618c08a9a59106da08b56f")
