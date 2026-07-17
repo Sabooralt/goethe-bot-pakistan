@@ -3,6 +3,8 @@ import puppeteer from "puppeteer-extra";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { browserArgs } from "../utils/browserArgs";
+import path from "path";
+import os from "os";
 
 puppeteer.use(StealthPlugin());
 const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
@@ -72,19 +74,20 @@ class PrewarmedBrowserPool {
             const args = [...browserArgs];
 
             if (proxy) {
-                browserArgs.push(
+                args.push(
                     `--proxy-server=${proxy.type}://${proxy.host}:${proxy.port}`
                 );
             }
+            const userDataDir = path.join(os.tmpdir(), `profile-${browserNumber}-${Date.now()}`);
 
             const browser = await puppeteer.launch({
                 headless: false,
                 executablePath: "/usr/bin/google-chrome",
-                userDataDir: `./profile-${browserNumber}`,
+                userDataDir,
                 env: {
                     DISPLAY: display,
                 },
-                args: args,
+                args,
                 timeout: 10000,
                 protocolTimeout: 180000,
                 defaultViewport: null,
@@ -92,7 +95,32 @@ class PrewarmedBrowserPool {
 
             const page = await browser.newPage();
 
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36');
+
+
+
+            const client = await page.target().createCDPSession();
+            await client.send('Page.addScriptToEvaluateOnNewDocument', {
+                source: `
+    const getParameterProxyHandler = {
+      apply(target, thisArg, args) {
+        const param = args[0];
+        if (param === 37445) return 'Google Inc. (Intel)';
+        if (param === 37446) return 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)';
+        return Reflect.apply(target, thisArg, args);
+      }
+    };
+    WebGLRenderingContext.prototype.getParameter = new Proxy(WebGLRenderingContext.prototype.getParameter, getParameterProxyHandler);
+    WebGL2RenderingContext.prototype.getParameter = new Proxy(WebGL2RenderingContext.prototype.getParameter, getParameterProxyHandler);
+  `
+            });
+
+            await page.evaluateOnNewDocument(() => {
+                Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+            });
+
             await page.setViewport({ width: 1280, height: 720 });
+
 
 
             if (proxy && proxy.username && proxy.password) {
@@ -106,13 +134,8 @@ class PrewarmedBrowserPool {
             page.on("request", (req: any) => {
                 const url = req.url();
                 const type = req.resourceType();
-
-                if (url.includes("QmiTVW") ||
-                    url.includes("phtK") ||
-                    url.includes("EBFUJX") ||
-                    url.includes("28M7sj") ||
-                    url.includes("akam")) {
-                    console.log(`[request] Blocked Akamai sensor: ${url.substring(0, 80)}`);
+                if (url.includes("qsC0Q1SRs") || url.includes("VS0kRERZ") || url.includes("EBFUJX") || url.includes("28M7sj") || url.includes("akam")) {
+                    console.log(`[browserRequest] Blocked Akamai sensor: ${url.substring(0, 80)}`);
                     req.abort();
                     return;
                 }
@@ -124,22 +147,6 @@ class PrewarmedBrowserPool {
 
 
 
-            await page.evaluateOnNewDocument(() => {
-                localStorage.setItem("uc_gcm", JSON.stringify({
-                    adsDataRedaction: true,
-                    adPersonalization: "denied",
-                    adStorage: "denied",
-                    adUserData: "denied",
-                    analyticsStorage: "denied",
-                }));
-                localStorage.setItem("uc_ui_version", "3.73.0");
-                localStorage.setItem("uc_user_interaction", "true");
-                localStorage.setItem("uc_settings", JSON.stringify({
-                    controllerId: "42e213448633d19d017343f77368ef4ab462b0ca1fb10607c313393260b08f21",
-                    id: "rTbKQ4Qc-",
-                    services: [],
-                }));
-            });
 
             console.log(`[preWarm] Pre-warmed browser ${browserNumber}`);
 

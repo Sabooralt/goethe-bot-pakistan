@@ -246,6 +246,7 @@ const runAutomatedFlow = async (
     if (
       title.includes("error") ||
       title.includes("unterbrechung") ||
+      title.includes("forbidden") ||
       /http\s?\d{3}/i.test(title)
     ) {
       console.error(`[${identifier}] ⚠️ Error page detected (${title}), retrying in 5s...`);

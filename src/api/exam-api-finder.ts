@@ -123,11 +123,7 @@ class ExamMonitor {
         const url = req.url();
         const type = req.resourceType();
 
-        if (url.includes("QmiTVW") ||
-          url.includes("phtK") ||
-          url.includes("EBFUJX") ||
-          url.includes("28M7sj") ||
-          url.includes("akam")) {
+        if (url.includes("qsC0Q1SRs") || url.includes("VS0kRERZ") || url.includes("EBFUJX") || url.includes("28M7sj") || url.includes("akam")) {
           console.log(`[request] Blocked Akamai sensor: ${url.substring(0, 80)}`);
           req.abort();
           return;

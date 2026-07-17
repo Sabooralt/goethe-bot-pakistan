@@ -21,7 +21,9 @@ interface States {
   VIEWING_SCHEDULES: string;
   REMOVING_SCHEDULE: string;
 }
+const TEST_MODE = process.env.TEST_MODE === "true";
 
+console.log(`[server] Starting server in ${TEST_MODE ? "TEST" : "PRODUCTION"} mode...`);
 const token = process.env.TELEGRAM_TOKEN || "";
 const mongoUri = process.env.MONGO_URI || "";
 const PORT = process.env.HEALTH_CHECK_PORT || 3001;
@@ -85,7 +87,7 @@ app.post("/api/trigger-booking", async (req: Request, res: Response) => {
   try {
     const mockData = await readMockData();
 
-    const oid = process.env.TEST_OID || "50a31a451b5c172332460475f84c4a09e75fa2e5cdc3a329111d3b91105889be";
+    const oid = process.env.TEST_OID || "";
     const examIndex = 0;
 
     
