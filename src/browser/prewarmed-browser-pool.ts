@@ -1,12 +1,7 @@
-import { Browser, Page } from "puppeteer";
-import puppeteer from "puppeteer-extra";
+import { Browser, Page } from "playwright-core";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { browserArgs } from "../utils/browserArgs";
-import path from "path";
-import os from "os";
+import { Camoufox, LaunchOptions } from "camoufox-js";
 
-puppeteer.use(StealthPlugin());
 const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
 
 interface PrewarmedBrowser {
@@ -61,6 +56,27 @@ class PrewarmedBrowserPool {
         try {
             console.log(`[preWarm] Pre-warming browser ${browserNumber} on ${display}...`);
 
+            const args: LaunchOptions = {
+                os: 'windows',
+                geoip: true,
+                humanize: 1.5,
+                locale: ['en-US', 'en-GB'],
+                block_images: false,
+                block_webrtc: true,
+                screen: {
+                    minWidth: 1024,
+                    maxWidth: 1920,
+                    minHeight: 768,
+                    maxHeight: 1080
+                },
+                headless: false,
+                fonts: ['Arial', 'Times New Roman'],
+                env: {
+                    ...process.env,
+                    DISPLAY: display,
+                }
+            };
+
             let proxy: any = null;
             let proxyUrl = "";
             if (USE_PROXIES) {
@@ -71,83 +87,19 @@ class PrewarmedBrowserPool {
                 }
             }
 
-            const args = [...browserArgs];
-
-            if (proxy) {
-                args.push(
-                    `--proxy-server=${proxy.type}://${proxy.host}:${proxy.port}`
-                );
+            if (proxy && proxy.username && proxy.passsword) {
+                args.proxy = {
+                    server: proxyUrl,
+                    username: proxy.username,
+                    password: proxy.password
+                };
             }
-            const userDataDir = path.join(os.tmpdir(), `profile-${browserNumber}-${Date.now()}`);
 
-            const browser = await puppeteer.launch({
-                headless: false,
-                executablePath: "/usr/bin/google-chrome",
-                userDataDir,
-                env: {
-                    DISPLAY: display,
-                },
-                args,
-                timeout: 10000,
-                protocolTimeout: 180000,
-                defaultViewport: null,
-            });
+            const browser = await Camoufox(args);
 
             const page = await browser.newPage();
-
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36');
-
-
-
-            const client = await page.target().createCDPSession();
-            await client.send('Page.addScriptToEvaluateOnNewDocument', {
-                source: `
-    const getParameterProxyHandler = {
-      apply(target, thisArg, args) {
-        const param = args[0];
-        if (param === 37445) return 'Google Inc. (Intel)';
-        if (param === 37446) return 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)';
-        return Reflect.apply(target, thisArg, args);
-      }
-    };
-    WebGLRenderingContext.prototype.getParameter = new Proxy(WebGLRenderingContext.prototype.getParameter, getParameterProxyHandler);
-    WebGL2RenderingContext.prototype.getParameter = new Proxy(WebGL2RenderingContext.prototype.getParameter, getParameterProxyHandler);
-  `
-            });
-
-            await page.evaluateOnNewDocument(() => {
-                Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
-            });
-
-            await page.setViewport({ width: 1280, height: 720 });
-
-
-
-            if (proxy && proxy.username && proxy.password) {
-                await page.authenticate({
-                    username: proxy.username,
-                    password: proxy.password,
-                });
-            }
-
-            await page.setRequestInterception(true);
-            page.on("request", (req: any) => {
-                const url = req.url();
-                const type = req.resourceType();
-                if (url.includes("qsC0Q1SRs") || url.includes("VS0kRERZ") || url.includes("EBFUJX") || url.includes("28M7sj") || url.includes("akam")) {
-                    console.log(`[browserRequest] Blocked Akamai sensor: ${url.substring(0, 80)}`);
-                    req.abort();
-                    return;
-                }
-                req.continue();
-            });
-
             await page.setDefaultNavigationTimeout(180000);
             await page.setDefaultTimeout(180000);
-
-
-
-
             console.log(`[preWarm] Pre-warmed browser ${browserNumber}`);
 
             return {
@@ -170,7 +122,7 @@ class PrewarmedBrowserPool {
 
     async warmupBrowsers(): Promise<void> {
         try {
-            console.log(`[preWarm] Warming up ${BROWSER_COUNT} browsers...`);
+            console.log(`🔥 Warming up ${BROWSER_COUNT} browsers...`);
 
             const warmupPromises = [];
 
@@ -212,9 +164,9 @@ class PrewarmedBrowserPool {
 
             await Promise.all(warmupPromises);
 
-            console.log(`[preWarm] Warming complete! ${this.browsers.size}/${BROWSER_COUNT} ready`);
+            console.log(`🎉 Warming complete! ${this.browsers.size}/${BROWSER_COUNT} ready`);
         } catch (error) {
-            console.error(`[preWarm] Warmup error:`, error);
+            console.error(`❌ Warmup error:`, error);
         }
     }
 
@@ -227,7 +179,7 @@ class PrewarmedBrowserPool {
         const browser = this.browsers.get(browserNumber);
 
         if (browser && browser.isReady) {
-            console.log(`[preWarm] Got pre-warmed browser ${browserNumber}`);
+            console.log(`⚡ INSTANT: Got pre-warmed browser ${browserNumber}`);
             return browser;
         }
 

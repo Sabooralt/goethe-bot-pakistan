@@ -1,13 +1,9 @@
-import puppeteer from "puppeteer-extra";
-import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import { Browser, Page } from "puppeteer";
-import dotenv from "dotenv";
 
-dotenv.config();
+import { Browser, Page } from "playwright-core";
+import { Camoufox, LaunchOptions } from "camoufox-js";
+import { USE_PROXIES } from "../proxyPool";
 
-const USE_PROXIES = process.env.USE_PROXIES;
 
-puppeteer.use(StealthPlugin());
 
 const TARGET_URL =
   process.env.TARGET_URL ||
@@ -83,67 +79,51 @@ class ExamMonitor {
     try {
       console.log("[browser] Launching browser");
 
-      const proxyHost = process.env.GERMANY_PROXY_HOST;
-      const username = process.env.GERMANY_PROXY_USERNAME;
-      const password = process.env.GERMANY_PROXY_PASSWORD;
+      let proxyHost: string | undefined = undefined;
+      let username: string | undefined = undefined;
+      let password: string | undefined = undefined;
+      let rotatingUsername: string | undefined = undefined;
 
-      // Generate unique session ID for each launch = new IP each time
-      const sessionId = Math.floor(Math.random() * 1000000);
-      const rotatingUsername = username
-        ? `${username}-sessid-${sessionId}-sesstime-2`
-        : undefined;
+      if (USE_PROXIES) {
+        proxyHost = process.env.GERMANY_PROXY_HOST;
+        username = process.env.GERMANY_PROXY_USERNAME;
+        password = process.env.GERMANY_PROXY_PASSWORD;
+        const sessionId = Math.floor(Math.random() * 1000000);
+        rotatingUsername = username
+          ? `${username}-sessid-${sessionId}-sesstime-2`
+          : undefined;
 
-      console.log(`[browser] Using proxy session: ${sessionId}`);
-
-      this.browser = await puppeteer.launch({
-        headless: false,
-        executablePath: "/usr/bin/google-chrome",
-        userDataDir: `./profile_${sessionId}`, // fresh profile = fresh fingerprint
-        env: { DISPLAY: ":2" },
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          ...(proxyHost ? [`--proxy-server=http://${proxyHost}`] : []),
-        ],
-        defaultViewport: null,
-      });
-
-      this.page = await this.browser.newPage();
-      await this.page.setViewport({ width: 1280, height: 720 });
-
-      if (rotatingUsername && password) {
-        await this.page.authenticate({
-          username: rotatingUsername,
-          password,
-        });
+        console.log(`[browser] Using proxy session: ${sessionId}`);
       }
 
-      await this.page.setRequestInterception(true);
-      this.page.on("request", (req: any) => {
-        const url = req.url();
-        const type = req.resourceType();
+      const args: LaunchOptions = {
+        os: 'windows',
+        geoip: true,
+        humanize: 1.5,
+        locale: ['en-US', 'en-GB'],
+        block_images: true,
+        block_webrtc: true,
+        screen: {
+          minWidth: 1024,
+          maxWidth: 1920,
+          minHeight: 768,
+          maxHeight: 1080
+        },
+        headless: true,
+        fonts: ['Arial', 'Times New Roman'],
+      }
 
-        if (url.includes("qsC0Q1SRs") || url.includes("VS0kRERZ") || url.includes("EBFUJX") || url.includes("28M7sj") || url.includes("akam")) {
-          console.log(`[request] Blocked Akamai sensor: ${url.substring(0, 80)}`);
-          req.abort();
-          return;
+      if (USE_PROXIES && proxyHost && rotatingUsername && password) {
+        args.proxy = {
+          server: proxyHost,
+          username: rotatingUsername,
+          password: password
         }
+      }
 
-        // Never block the examfinder API call
-        if (url.includes("examfinder")) {
-          console.log(`[request] Allowing examfinder: ${url.substring(0, 80)}`);
-          req.continue();
-          return;
-        }
-
-        if (["image", "font", "media", "stylesheet"].includes(type)) {
-          req.abort();
-          return;
-        }
-
-        req.continue();
-      });
-
+      this.browser = await Camoufox(args);
+      //@ts-ignore
+      this.page = await this.browser.newPage();
 
 
       console.log("[browser] Browser launched");
@@ -207,7 +187,7 @@ class ExamMonitor {
 
           try {
             await page.goto(TARGET_URL, {
-              waitUntil: "networkidle0",
+              waitUntil: "networkidle",
               timeout: 20000,
             });
           } catch (error) {
