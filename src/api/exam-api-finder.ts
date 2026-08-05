@@ -78,7 +78,6 @@ class ExamMonitor {
   private async launchBrowser(): Promise<boolean> {
     try {
       console.log("[browser] Launching browser");
-
       let proxyHost: string | undefined = undefined;
       let username: string | undefined = undefined;
       let password: string | undefined = undefined;
@@ -90,11 +89,13 @@ class ExamMonitor {
         password = process.env.GERMANY_PROXY_PASSWORD;
         const sessionId = Math.floor(Math.random() * 1000000);
         rotatingUsername = username
-          ? `${username}-sessid-${sessionId}-sesstime-2`
+          ? `${username}-sessid-${sessionId}-sesstime-6`
           : undefined;
 
         console.log(`[browser] Using proxy session: ${sessionId}`);
       }
+
+
 
       const args: LaunchOptions = {
         os: 'windows',
@@ -120,12 +121,15 @@ class ExamMonitor {
           password: password
         }
       }
+      console.log({
+        useProxies: USE_PROXIES,
+        USE_PROXIES,
+        argsProxy: args.proxy,
+      });
 
       this.browser = await Camoufox(args);
-      //@ts-ignore
+      // @ts-ignore
       this.page = await this.browser.newPage();
-
-
       console.log("[browser] Browser launched");
       return true;
     } catch (error) {

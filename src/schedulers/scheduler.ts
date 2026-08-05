@@ -3,7 +3,6 @@ import { ExamData, examMonitor } from "../api/exam-api-finder";
 import { runAllAccountsWithPrewarmedBrowsers } from "../cluster/runCluster";
 import Schedule, { ISchedule } from "../models/scheduleSchema";
 import User, { UserDocument } from "../models/userSchema";
-import Account from "../models/accountSchema";
 import { DateTime } from "luxon";
 import dotenv from "dotenv";
 import { browserPool } from "../browser/prewarmed-browser-pool";
@@ -101,6 +100,30 @@ class ExamScheduler {
       }
 
       for (const schedule of schedulesToMonitor) {
+        if (examMonitor.getStatus().isPolling || examMonitor.getStatus().processingOid) {
+          console.log(
+            `⏸️ Skipping ${schedule.name}, another schedule is already being monitored`
+          );
+          const user = schedule.createdBy as unknown as UserDocument;
+
+          if (user.telegramId) {
+            await bot.sendMessage(
+              user.telegramId,
+              `⚠️ Monitoring Skipped\n\n` +
+              `📋 Schedule: ${schedule.name}\n` +
+              `⏰ Scheduled: ${schedule.runAt.toLocaleString()}\n\n` +
+              `Another schedule is already being monitored. Only one monitoring session can run at a time, so this schedule was skipped.\n\n` +
+              `Please reschedule it or try again later.`,
+              { parse_mode: "Markdown" }
+            );
+          }
+          await Schedule.findByIdAndUpdate(schedule.id, {
+            completed: true,
+            status: "skipped",
+            lastRun: new Date(),
+          });
+          break;
+        }
         const scheduleTimeUtc = DateTime.fromJSDate(schedule.runAt, {
           zone: "utc",
         });
@@ -135,6 +158,9 @@ class ExamScheduler {
   }
 
   private async startMonitoringSession(schedule: ISchedule) {
+    if (examMonitor.getStatus().isPolling || examMonitor.getStatus().processingOid) {
+      return;
+    }
     const scheduleId = schedule.id.toString();
     const user = schedule.createdBy as unknown as UserDocument;
 
@@ -195,7 +221,7 @@ class ExamScheduler {
 
       await examMonitor.startPolling(process.env.TEST_MODE === "true" ?
         new Date("2026-07-07T10:00:00.000Z") : schedule.runAt
-        ,{
+        , {
           maxDurationMs: 5 * 60 * 60 * 1000,
 
           onExamWithOid: async (exam: ExamData) => {

@@ -4,7 +4,8 @@ import type TelegramBot from "node-telegram-bot-api";
 import { AccountDocument } from "../models/accountSchema";
 import { UserDocument } from "../models/userSchema";
 import { handleBookingConflict } from "../fillers/handleBookingConflict";
-import { selectAvailableModules } from "../fillers/selectAllModules";
+import { selectModules } from "../fillers/selectModules";
+import { getModuleStatus, ModuleKey } from "../fillers/getModuleStatus";
 
 dotenv.config();
 
@@ -81,7 +82,7 @@ const navigateWithTimeout = async (
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       console.log(`[${identifier}] 🔄 Navigation attempt ${attempt}/${maxAttempts}`);
-      await page.goto(url, { waitUntil: "networkidle", timeout: 5000 });
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 10000 });
 
       if (await isRateLimited(page)) {
         console.log(`[${identifier}] 🚫 Rate limited detected`);
@@ -135,8 +136,16 @@ const runManualFlow = async (
       `🚫 Rate limited on initial load — starting retry loop with exponential backoff`
     );
   } else if (alreadyLoaded) {
+    const availableModules = await getModuleStatus(page)
     sendLog(bot, chatId, identifier,
-      `✅ *Page already loaded!*\n\n🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n\nComplete booking manually — browser stays open 30 min`
+      `✅ *Page already loaded!*\n\n🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n
+Modules:\n
+📖 Reading: ${availableModules.read ? "✅" : "❌"}\n
+🎧 Listening: ${availableModules.hear ? "✅" : "❌"}\n
+✍️ Writing: ${availableModules.write ? "✅" : "❌"}\n
+🗣️ Speaking: ${availableModules.speak ? "✅" : "❌"}\n\n
+Complete booking manually — browser stays open 30 min
+      `
     );
     await delay(1800000);
     return;
@@ -199,9 +208,16 @@ const runManualFlow = async (
         }
         continue;
       }
-
+      const availableModules = await getModuleStatus(page)
       sendLog(bot, chatId, identifier,
-        `✅ *Page loaded successfully!*\n\nAttempts: ${attempts} | Time: ${Math.round(elapsed / 1000)}s\n🚫 Rate limits: ${totalRateLimits}\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n\nComplete booking manually — browser stays open 30 min`
+        `✅ *Page loaded successfully!*\n\nAttempts: ${attempts} | Time: ${Math.round(elapsed / 1000)}s\n🚫 Rate limits: ${totalRateLimits}\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n
+Modules:\n
+📖 Reading: ${availableModules.read ? "✅" : "❌"}\n
+🎧 Listening: ${availableModules.hear ? "✅" : "❌"}\n
+✍️ Writing: ${availableModules.write ? "✅" : "❌"}\n
+🗣️ Speaking: ${availableModules.speak ? "✅" : "❌"}\n\n
+Complete booking manually — browser stays open 30 min
+      `
       );
       await delay(1800000);
       return;
@@ -326,12 +342,73 @@ const runAutomatedFlow = async (
 
 
     sendLog(bot, chatId, identifier, `🚀 Starting automated booking`);
+
+
+
+    const availableModules = await getModuleStatus(page);
     sendLog(bot, chatId, identifier,
-      `🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n🔌 VNC Port: ${displayInfo.vncPort}`
+      `🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n🔌 VNC Port: ${displayInfo.vncPort}\n
+Modules:\n
+📖 Reading: ${availableModules.read ? "✅" : "❌"}\n
+🎧 Listening: ${availableModules.hear ? "✅" : "❌"}\n
+✍️ Writing: ${availableModules.write ? "✅" : "❌"}\n
+🗣️ Speaking: ${availableModules.speak ? "✅" : "❌"}\n
+      `
     );
 
+    console.log(availableModules);
+
+    const allRequiredAvailable = Object.entries(account.modules).every(
+      ([key, required]) => !required || availableModules[key as ModuleKey]
+    );
+
+
+    if (!allRequiredAvailable) {
+      sendLog(bot, chatId, identifier,
+        `⚠️ Required modules not available — stopping automation\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually if needed`
+      );
+      await delay(1800000);
+      return;
+    }
+    sendLog(bot, chatId, identifier, `✅ Modules selected — continuing`);
+
+    await page.locator("button.cs-button--arrow_next").nth(1).click();
+    console.log(`[${identifier}] ✅ Clicked next`);
+
+    await page.waitForLoadState("domcontentloaded");
+
+    await page.locator("button.cs-layer__button--high").nth(1).click();
+
+    console.log(`[${identifier}] ✅ Clicked book for me`);
+
+    await page.waitForLoadState("domcontentloaded");
+
+    // Login
+    await page.locator("#username").fill(account.email);
+    await page.fill("#password", account.password);
+    await page.click('input[type="submit"][name="submit"]');
+    sendLog(bot, chatId, identifier, `🔐 Login submitted`);
+
+    try {
+      await page.waitForLoadState("domcontentloaded");
+    } catch {
+      sendLog(bot, chatId, identifier,
+        `❌ Login failed or timed out — check credentials\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually`
+      );
+      await delay(1800000);
+      return;
+    }
+
+    await page.locator("button.cs-button--arrow_next").nth(1).click();
+    await page.waitForLoadState("domcontentloaded");
+
+    await page.locator("button.cs-button--arrow_next").nth(1).click();
+    await page.waitForLoadState("domcontentloaded");
+
+    console.log(`[${identifier}] ✅ Reached payment page`);
+
     sendLog(bot, chatId, identifier,
-      `Change detected in modules page — stopping automation\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually if needed`
+      `✅ *Redirected to payment page!*\n\n💳 Review details and complete payment manually\n⏳ ~30 min before session expires\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n🖥️ Display: ${displayInfo.display}`
     );
 
     await delay(1800000);
@@ -371,15 +448,14 @@ const startBooking = async (
 
   console.log(`[${identifier}] 🔍 Title: "${await page.title()}" | URL: ${page.url()}`);
 
-  let pageBody = await page.evaluate(() => document.body?.innerText.trim() || "");
-
-  while (!pageBody) {
-    console.log(`[${identifier}] ⏳ Page still loading — waiting 2s`);
-    await delay(2000);
-    pageBody = await page.evaluate(() => document.body?.innerText.trim() || "");
+  try {
+    await page.waitForFunction(
+      () => document.body?.innerText.trim().length > 0,
+      { timeout: 30000 }
+    );
+  } catch {
+    console.warn(`[${identifier}] ⚠️ Page body still empty after 30s, continuing anyway...`);
   }
-
-
 
   if (account) {
     const resolvedChatId = chatId ?? (account.user as UserDocument).telegramId;

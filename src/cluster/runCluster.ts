@@ -107,7 +107,7 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
       // Navigate first
       try {
         await browser.page.goto(bookingUrl, {
-          waitUntil: "domcontentloaded",
+          waitUntil: "networkidle",
           timeout: 60000,
         });
         console.log(`[cluster] Browser ${browser.browserNumber} reached booking page`);

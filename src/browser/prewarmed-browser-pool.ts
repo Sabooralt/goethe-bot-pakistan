@@ -1,6 +1,7 @@
 import { Browser, Page } from "playwright-core";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
 import { Camoufox, LaunchOptions } from "camoufox-js";
+import { CookieConsentBypass } from "./cookieConsentBypass";
 
 const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
 
@@ -22,6 +23,8 @@ class PrewarmedBrowserPool {
     private warmingUp: Set<number> = new Set();
     private displayAllocationLock = Promise.resolve();
     private preNavigated = false;
+
+
 
     private async allocateDisplay(): Promise<string | null> {
         return new Promise((resolve) => {
@@ -55,12 +58,18 @@ class PrewarmedBrowserPool {
     ): Promise<PrewarmedBrowser | null> {
         try {
             console.log(`[preWarm] Pre-warming browser ${browserNumber} on ${display}...`);
+            function pickOS(): LaunchOptions["os"] {
+                const r = Math.random();
+
+                if (r < 0.7) return "windows";
+                if (r < 0.9) return "macos";
+                return "linux";
+            }
 
             const args: LaunchOptions = {
-                os: 'windows',
+                os: pickOS(),
                 geoip: true,
                 humanize: 1.5,
-                locale: ['en-US', 'en-GB'],
                 block_images: false,
                 block_webrtc: true,
                 screen: {
@@ -87,7 +96,7 @@ class PrewarmedBrowserPool {
                 }
             }
 
-            if (proxy && proxy.username && proxy.passsword) {
+            if (proxy) {
                 args.proxy = {
                     server: proxyUrl,
                     username: proxy.username,
@@ -99,8 +108,11 @@ class PrewarmedBrowserPool {
 
             const page = await browser.newPage();
             await page.setDefaultNavigationTimeout(180000);
-            await page.setDefaultTimeout(180000);
+            await page.setDefaultTimeout(20000);
+            await CookieConsentBypass(page, true);
             console.log(`[preWarm] Pre-warmed browser ${browserNumber}`);
+
+
 
             return {
                 browser,
