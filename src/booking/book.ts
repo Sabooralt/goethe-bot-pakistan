@@ -1,3 +1,5 @@
+//Pak
+
 import { Page } from "playwright-core";
 import dotenv from "dotenv";
 import type TelegramBot from "node-telegram-bot-api";
@@ -5,6 +7,7 @@ import { AccountDocument } from "../models/accountSchema";
 import { UserDocument } from "../models/userSchema";
 import { getModuleStatus, ModuleKey } from "../fillers/getModuleStatus";
 import { accountPool } from "../accounts/account-pool"; // adjust path to wherever you place account-pool.ts
+import { notifyBookingCompleted } from "../fillers/notifyBookingComplete";
 
 dotenv.config();
 
@@ -271,15 +274,15 @@ const runAutomatedFlow = async (
     await page.locator("button.cs-button--arrow_next").nth(1).click();
     await page.waitForLoadState("domcontentloaded");
 
-    await page.locator("button.cs-button--arrow_next").nth(1).click();
+    await page.locator("button.cs-button--arrow_next").nth(0).click();
     await page.waitForLoadState("domcontentloaded");
 
-    console.log(`[${identifier}] ✅ Reached payment page`);
+    console.log(`[${identifier}] ✅ Booking Completed`);
 
     sendLog(bot, chatId, identifier,
-      `✅ *Redirected to payment page!*\n\n💳 Review details and complete payment manually\n⏳ ~30 min before session expires\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n🖥️ Display: ${displayInfo.display}`
+      `✅ *Booking Completed*\n\n💳 Review the page.\n⏳ ~30 min before session expires\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n🖥️ Display: ${displayInfo.display}`
     );
-
+    notifyBookingCompleted(page, bot, chatId, identifier);
     await delay(1800000);
 
     account.status = false;
