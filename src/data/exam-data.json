@@ -16,9 +16,8 @@
       "availableSeats": 30,
       "price": 15000,
       "currency": "INR",
-   "oid": "52619d04ba1cbbc1824f72addee0c38c67a06791d8337b424b2586f2150df06f",   
+      "oid": "52619d04ba1cbbc1824f72addee0c38c67a06791d8337b424b2586f2150df06f",
       "status": "upcoming",
-   
       "bookFromStamp": "2026-07-08T00:31:48.564Z"
     },
     {

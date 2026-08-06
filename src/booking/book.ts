@@ -9,6 +9,8 @@ import { getModuleStatus, ModuleKey } from "../fillers/getModuleStatus";
 
 dotenv.config();
 
+const EXAM = process.env.EXAM || "A1"
+
 interface DisplayInfo {
   display: string;
   displayNumber: string;
@@ -136,14 +138,9 @@ const runManualFlow = async (
       `🚫 Rate limited on initial load — starting retry loop with exponential backoff`
     );
   } else if (alreadyLoaded) {
-    const availableModules = await getModuleStatus(page)
+
     sendLog(bot, chatId, identifier,
       `✅ *Page already loaded!*\n\n🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n
-Modules:\n
-📖 Reading: ${availableModules.read ? "✅" : "❌"}\n
-🎧 Listening: ${availableModules.hear ? "✅" : "❌"}\n
-✍️ Writing: ${availableModules.write ? "✅" : "❌"}\n
-🗣️ Speaking: ${availableModules.speak ? "✅" : "❌"}\n\n
 Complete booking manually — browser stays open 30 min
       `
     );
@@ -208,14 +205,9 @@ Complete booking manually — browser stays open 30 min
         }
         continue;
       }
-      const availableModules = await getModuleStatus(page)
+
       sendLog(bot, chatId, identifier,
         `✅ *Page loaded successfully!*\n\nAttempts: ${attempts} | Time: ${Math.round(elapsed / 1000)}s\n🚫 Rate limits: ${totalRateLimits}\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n
-Modules:\n
-📖 Reading: ${availableModules.read ? "✅" : "❌"}\n
-🎧 Listening: ${availableModules.hear ? "✅" : "❌"}\n
-✍️ Writing: ${availableModules.write ? "✅" : "❌"}\n
-🗣️ Speaking: ${availableModules.speak ? "✅" : "❌"}\n\n
 Complete booking manually — browser stays open 30 min
       `
       );
@@ -345,30 +337,25 @@ const runAutomatedFlow = async (
 
 
 
-    const availableModules = await getModuleStatus(page);
-    sendLog(bot, chatId, identifier,
-      `🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n🔌 VNC Port: ${displayInfo.vncPort}\n
-Modules:\n
-📖 Reading: ${availableModules.read ? "✅" : "❌"}\n
-🎧 Listening: ${availableModules.hear ? "✅" : "❌"}\n
-✍️ Writing: ${availableModules.write ? "✅" : "❌"}\n
-🗣️ Speaking: ${availableModules.speak ? "✅" : "❌"}\n
-      `
-    );
-
-    console.log(availableModules);
-
-    const allRequiredAvailable = Object.entries(account.modules).every(
-      ([key, required]) => !required || availableModules[key as ModuleKey]
-    );
-
-
-    if (!allRequiredAvailable) {
+    if (!EXAM.includes("A")) {
+      const availableModules = await getModuleStatus(page);
       sendLog(bot, chatId, identifier,
-        `⚠️ Required modules not available — stopping automation\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually if needed`
+        `🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n🔌 VNC Port: ${displayInfo.vncPort}\n
+      `
       );
-      await delay(1800000);
-      return;
+
+      const allRequiredAvailable = Object.entries(account.modules).every(
+        ([key, required]) => !required || availableModules[key as ModuleKey]
+      );
+
+
+      if (!allRequiredAvailable) {
+        sendLog(bot, chatId, identifier,
+          `⚠️ Required modules not available — stopping automation\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually if needed`
+        );
+        await delay(1800000);
+        return;
+      }
     }
     sendLog(bot, chatId, identifier, `✅ Modules selected — continuing`);
 
