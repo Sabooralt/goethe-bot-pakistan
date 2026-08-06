@@ -1,10 +1,10 @@
 import startBooking from "../booking/book";
 import { bot } from "..";
-import Account, { AccountDocument } from "../models/accountSchema";
 import Schedule from "../models/scheduleSchema";
 import { UserDocument } from "../models/userSchema";
 import dotenv from "dotenv";
 import { browserPool, PrewarmedBrowser } from "../browser/prewarmed-browser-pool";
+import { accountPool } from "../accounts/account-pool";
 
 dotenv.config();
 
@@ -23,12 +23,6 @@ const getDisplayInfo = (browser: PrewarmedBrowser): DisplayInfo => {
     noVncUrl: `http://${process.env.SERVER_IP || "localhost"}:${6080 + displayNum}/vnc.html`,
     vncPort: 5900 + displayNum,
   };
-};
-
-const getAccountsForUser = async (userId: string): Promise<AccountDocument[]> => {
-  const accounts = await Account.find({ user: userId, status: true }).populate("user");
-  console.log(`[cluster] Found ${accounts.length} active accounts for user ${userId}`);
-  return accounts;
 };
 
 export const runAllAccountsWithPrewarmedBrowsers = async (
@@ -67,41 +61,40 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
 
   console.log(`[cluster] ${prewarmedBrowsers.length} browsers ready`);
 
-  // Get accounts
-  let accounts: AccountDocument[] = [];
+  // Initialize the shared account pool ONCE — browsers claim from it
+  // dynamically as each one individually catches the slot, rather than
+  // being preassigned an account by array index before anything happens.
   if (user?._id) {
     try {
-      accounts = await getAccountsForUser(user._id.toString());
+      await accountPool.initialize(user._id.toString());
+      const accountCount = accountPool.remaining();
+      console.log(`[cluster] Account pool ready: ${accountCount} account(s) for ${prewarmedBrowsers.length} browsers`);
+
+      if (accountCount === 0) {
+        sendLog(`[cluster] No active accounts found — all ${prewarmedBrowsers.length} browsers will run manually if they catch the slot`);
+      } else if (accountCount < prewarmedBrowsers.length) {
+        sendLog(`[cluster] ${accountCount} account(s) available for ${prewarmedBrowsers.length} browsers — accounts claimed first-come as browsers catch the slot; remaining browsers fall back to manual`);
+      } else {
+        sendLog(`[cluster] ${accountCount} account(s) available — enough for all ${prewarmedBrowsers.length} browsers`);
+      }
     } catch (err) {
-      console.error("[cluster] Failed to fetch accounts:", err);
-      sendLog(`[cluster] Failed to fetch accounts: ${(err as Error).message} — all browsers will run manually`);
+      console.error("[cluster] Failed to initialize account pool:", err);
+      sendLog(`[cluster] Failed to load accounts: ${(err as Error).message} — all browsers will run manually if they catch the slot`);
     }
+  } else {
+    console.warn("[cluster] No user resolved — account pool will be empty, all browsers run manually");
   }
 
-  if (accounts.length === 0) {
-    console.warn("[cluster] No active accounts — all browsers will run manual flow");
-    sendLog(`[cluster] No active accounts found — all ${prewarmedBrowsers.length} browsers running manual flow`);
-  } else if (accounts.length < prewarmedBrowsers.length) {
-    console.warn(`[cluster] ${accounts.length} accounts for ${prewarmedBrowsers.length} browsers — ${prewarmedBrowsers.length - accounts.length} browsers will run manual flow`);
-    sendLog(`[cluster] ${accounts.length} accounts assigned, ${prewarmedBrowsers.length - accounts.length} browsers running manual flow`);
-  }
-
-  // Navigate all browsers in parallel then start booking
+  // Navigate all browsers in parallel then start booking — account
+  // assignment now happens inside startBooking, at the moment each
+  // browser individually catches the slot.
   console.log(`[cluster] Redirecting ${prewarmedBrowsers.length} browsers in parallel...`);
 
   const bookingUrl = `https://www.goethe.de/coe?lang=en&oid=${oid}`;
 
-  const bookingPromises = prewarmedBrowsers.map((browser, index) => {
-    // Assign account by index — browsers beyond account count get undefined
-    const account: AccountDocument | undefined = accounts[index];
+  const bookingPromises = prewarmedBrowsers.map((browser) => {
     const displayInfo = getDisplayInfo(browser);
     const chatId = user?.telegramId || null;
-
-    console.log(
-      account
-        ? `[cluster] Browser ${browser.browserNumber} -> ${account.email}`
-        : `[cluster] Browser ${browser.browserNumber} -> manual (no account)`
-    );
 
     return (async () => {
       // Navigate first
@@ -116,7 +109,8 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
         // Don't return — pass to startBooking anyway, it handles retries
       }
 
-      // Start booking — automated if account present, manual otherwise
+      // startBooking now claims an account dynamically once it confirms
+      // the slot is actually caught for this specific browser.
       try {
         await startBooking(
           browser.page,
@@ -124,11 +118,8 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
           bot,
           displayInfo,
           chatId,
-          account, // undefined for browsers without accounts → falls to manual flow
         );
       } catch (err) {
-        // Should never reach here since startBooking catches everything internally
-        // but just in case — keep browser alive
         console.error(`[cluster] Browser ${browser.browserNumber} unhandled error:`, (err as Error).message);
         sendLog(
           `[Browser ${browser.browserNumber}] Unhandled error: ${(err as Error).message}\nAccess manually: ${displayInfo.noVncUrl}`
@@ -144,7 +135,9 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
   const totalTime = Date.now() - startTime;
 
   console.log(`[cluster] All browsers completed — ${succeeded}/${prewarmedBrowsers.length} | ${totalTime}ms`);
-  sendLog(`[cluster] All browsers completed\nSuccess: ${succeeded}/${prewarmedBrowsers.length}\nTime: ${totalTime}ms`);
+  sendLog(
+    `[cluster] All browsers completed\nSuccess: ${succeeded}/${prewarmedBrowsers.length}\nAccounts claimed: ${accountPool.totalClaimed()}\nTime: ${totalTime}ms`
+  );
 
   // Update schedule
   if (scheduleId) {
