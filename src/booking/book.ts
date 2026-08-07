@@ -238,7 +238,7 @@ const runAutomatedFlow = async (
         sendLog(bot, chatId, identifier,
           `⚠️ Required modules not available — stopping automation\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually if needed`
         );
-        await delay(1800000);
+        await delay(7200000);
         return;
       }
     }
@@ -264,7 +264,7 @@ const runAutomatedFlow = async (
       sendLog(bot, chatId, identifier,
         `❌ Login failed or timed out — check credentials\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually`
       );
-      await delay(1800000);
+      await delay(7200000);
       return;
     }
 
@@ -280,10 +280,12 @@ const runAutomatedFlow = async (
     console.log(`[${identifier}] ✅ Booking Completed`);
 
     sendLog(bot, chatId, identifier,
-      `✅ *Booking Completed*\n\n💳 Review the page.\n⏳ ~30 min before session expires\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n🖥️ Display: ${displayInfo.display}`
+      `✅ *Booking Completed*\n\n💳 Review the page.\n⏳ ~2 hrs before session expires\n\n🔗 noVNC: ${displayInfo.noVncUrl}\n🖥️ Display: ${displayInfo.display}`
     );
+
+    await delay(10000);
     notifyBookingCompleted(page, bot, chatId, identifier);
-    await delay(1800000);
+    await delay(7200000);
 
     account.status = false;
     await account.save();
@@ -295,9 +297,9 @@ const runAutomatedFlow = async (
   } catch (err) {
     console.error(`[${identifier}] ❌ Automated flow error:`, err);
     sendLog(bot, chatId, identifier,
-      `❌ Automation failed\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually — browser stays open 30 min`
+      `❌ Automation failed\n🔗 noVNC: ${displayInfo.noVncUrl}\nComplete manually — browser stays open 2 hrs`
     );
-    await delay(1800000);
+    await delay(7200000);
   }
 };
 
@@ -311,9 +313,9 @@ const runManualFlow = async (
   displayInfo: DisplayInfo
 ) => {
   sendLog(bot, chatId, identifier,
-    `✅ *Slot caught — no account available*\n\n🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n\nComplete booking manually — browser stays open 30 min`
+    `✅ *Slot caught — no account available*\n\n🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n\nComplete booking manually — browser stays open 2 hrs`
   );
-  await delay(1800000);
+  await delay(7200000);
 };
 
 // ── Main export ─────────────────────────────────────────────────────────────
