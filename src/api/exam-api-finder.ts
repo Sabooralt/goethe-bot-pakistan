@@ -87,12 +87,6 @@ class ExamMonitor {
         proxyHost = process.env.GERMANY_PROXY_HOST;
         username = process.env.GERMANY_PROXY_USERNAME;
         password = process.env.GERMANY_PROXY_PASSWORD;
-        const sessionId = Math.floor(Math.random() * 1000000);
-        rotatingUsername = username
-          ? `${username}-sessid-${sessionId}-sesstime-6`
-          : undefined;
-
-        console.log(`[browser] Using proxy session: ${sessionId}`);
       }
 
 
@@ -114,10 +108,10 @@ class ExamMonitor {
         fonts: ['Arial', 'Times New Roman'],
       }
 
-      if (USE_PROXIES && proxyHost && rotatingUsername && password) {
+      if (USE_PROXIES && proxyHost && username && password) {
         args.proxy = {
           server: proxyHost,
-          username: rotatingUsername,
+          username: username,
           password: password
         }
       }
@@ -191,7 +185,7 @@ class ExamMonitor {
 
           try {
             await page.goto(TARGET_URL, {
-              waitUntil: "networkidle",
+              waitUntil: "domcontentloaded",
               timeout: 20000,
             });
           } catch (error) {

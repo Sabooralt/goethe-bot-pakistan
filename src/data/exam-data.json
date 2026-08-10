@@ -16,45 +16,9 @@
       "availableSeats": 30,
       "price": 15000,
       "currency": "INR",
-      "oid": "a4e86c17d3f8caf8bac4bd3c5e57fbef41ce2e5bdace16cbefdd82b50669f728",
+      "oid": "67ad180ed2ee94a15dd8dd2662b4dff6f18ccf0ee77ec8da64601e0cc9ecce83",
       "status": "upcoming",
       "bookFromStamp": "2026-07-08T00:31:48.564Z"
-    },
-    {
-      "examId": "EXAM002",
-      "moduleId": "MOD001",
-      "locationName": "Delhi - Goethe Institute",
-      "locationCode": "KHI-GI",
-      "language": "German",
-      "level": "A2",
-      "startDate": "2026-05-15",
-      "endDate": "2026-05-15",
-      "examTime": "11:00",
-      "bookFrom": "22.04.2026",
-      "bookFromTime": "15:00:00.000",
-      "capacity": 25,
-      "availableSeats": 25,
-      "price": 18000,
-      "currency": "INR",
-      "status": "upcoming"
-    },
-    {
-      "examId": "EXAM003",
-      "moduleId": "MOD001",
-      "locationName": "Bangalore - Goethe Zentrum",
-      "locationCode": "LHE-GZ",
-      "language": "German",
-      "level": "B1",
-      "startDate": "2026-05-20",
-      "endDate": "2026-05-20",
-      "examTime": "10:00",
-      "bookFrom": "2026-04-28",
-      "bookFromTime": "09:30:00.000",
-      "capacity": 20,
-      "availableSeats": 20,
-      "price": 20000,
-      "currency": "INR",
-      "status": "upcoming"
     }
   ]
 }

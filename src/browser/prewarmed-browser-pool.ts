@@ -1,12 +1,14 @@
-import { Browser, Page } from "playwright-core";
+import { Browser, BrowserContext, BrowserContextOptions, Page, chromium } from "playwright-core";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
 import { Camoufox, LaunchOptions } from "camoufox-js";
+import { LaunchOptions as LaunchOptions2 } from "playwright-core";
 import { CookieConsentBypass } from "./cookieConsentBypass";
 
 const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
 
 interface PrewarmedBrowser {
     browser: Browser;
+    context: BrowserContext;
     page: Page;
     display: string;
     browserNumber: number;
@@ -66,6 +68,12 @@ class PrewarmedBrowserPool {
                 return "linux";
             }
 
+            const contextArgs: BrowserContextOptions = {
+                extraHTTPHeaders: {
+                    'Connection': "close"
+                }
+            };
+
             const args: LaunchOptions = {
                 os: pickOS(),
                 geoip: true,
@@ -97,16 +105,19 @@ class PrewarmedBrowserPool {
             }
 
             if (proxy) {
-                args.proxy = {
+                contextArgs.proxy = {
                     server: proxyUrl,
                     username: proxy.username,
                     password: proxy.password
                 };
             }
 
+            /*  const browser = await chromium.launch(args2) */
             const browser = await Camoufox(args);
 
-            const page = await browser.newPage();
+            const context = await browser.newContext(contextArgs);
+
+            const page = await context.newPage();
             await page.setDefaultNavigationTimeout(180000);
             await page.setDefaultTimeout(20000);
             await CookieConsentBypass(page, true);
@@ -116,6 +127,7 @@ class PrewarmedBrowserPool {
 
             return {
                 browser,
+                context,
                 page,
                 display,
                 browserNumber,
@@ -134,6 +146,7 @@ class PrewarmedBrowserPool {
 
     async warmupBrowsers(): Promise<void> {
         try {
+            const warmupStart = performance.now();
             console.log(`🔥 Warming up ${BROWSER_COUNT} browsers...`);
 
             const warmupPromises = [];
@@ -176,7 +189,14 @@ class PrewarmedBrowserPool {
 
             await Promise.all(warmupPromises);
 
-            console.log(`🎉 Warming complete! ${this.browsers.size}/${BROWSER_COUNT} ready`);
+            const totalWarmupTime = performance.now() - warmupStart;
+
+            console.log(
+                `🎉 Warmup complete! ` +
+                `${this.browsers.size}/${BROWSER_COUNT} ready ` +
+                `in ${totalWarmupTime.toFixed(2)} ms ` +
+                `(${(totalWarmupTime / 1000).toFixed(3)} s)`
+            );
         } catch (error) {
             console.error(`❌ Warmup error:`, error);
         }

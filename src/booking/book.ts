@@ -1,17 +1,32 @@
 //Pak
 
-import { Page } from "playwright-core";
+import { Browser, BrowserContext, Page } from "playwright-core";
 import dotenv from "dotenv";
 import type TelegramBot from "node-telegram-bot-api";
 import { AccountDocument } from "../models/accountSchema";
 import { UserDocument } from "../models/userSchema";
 import { getModuleStatus, ModuleKey } from "../fillers/getModuleStatus";
-import { accountPool } from "../accounts/account-pool"; // adjust path to wherever you place account-pool.ts
+import { accountPool } from "../accounts/account-pool";
 import { notifyBookingCompleted } from "../fillers/notifyBookingComplete";
+import { CookieConsentBypass } from "../browser/cookieConsentBypass";
 
 dotenv.config();
 
 const EXAM = process.env.EXAM || "A1";
+const REFRESH_INTERVAL_MS = 2500;
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const RATE_LIMIT_PING_INTERVAL_MS = 60000;
+let lastRateLimitPingAt = 0;
+let globalRateLimitCount = 0;
+
+const canSendRateLimitPing = (): boolean => {
+  const now = Date.now();
+  if (now - lastRateLimitPingAt >= RATE_LIMIT_PING_INTERVAL_MS) {
+    lastRateLimitPingAt = now;
+    return true;
+  }
+  return false;
+};
 
 interface DisplayInfo {
   display: string;
@@ -20,7 +35,6 @@ interface DisplayInfo {
   vncPort: number;
 }
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const sendLog = (
   bot: TelegramBot,
@@ -40,21 +54,11 @@ const sendLog = (
   });
 };
 
-const getBackoffDelay = (
-  attempt: number,
-  baseDelay = 5000,
-  maxDelay = 300000
-): number => {
-  const exponentialDelay = baseDelay * Math.pow(2, Math.min(attempt - 1, 6));
-  return Math.min(exponentialDelay, maxDelay);
-};
-
 const isRateLimited = async (page: Page): Promise<boolean> => {
   try {
     const title = (await page.title()).toLowerCase();
     const url = page.url().toLowerCase();
     return (
-      !title.includes("options") &&
       title.includes("429") ||
       title.includes("too many requests") ||
       title.includes("rate limit") ||
@@ -85,15 +89,12 @@ const navigateWithTimeout = async (
 ): Promise<{ success: boolean; rateLimited: boolean }> => {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      console.log(`[${identifier}] 🔄 Navigation attempt ${attempt}/${maxAttempts}`);
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 10000 });
 
       if (await isRateLimited(page)) {
         console.log(`[${identifier}] 🚫 Rate limited detected`);
         return { success: false, rateLimited: true };
       }
-
-      console.log(`[${identifier}] ✅ Page loaded within timeout`);
       return { success: true, rateLimited: false };
     } catch (error) {
       const err = error as Error;
@@ -113,23 +114,36 @@ const navigateWithTimeout = async (
   return { success: false, rateLimited: false };
 };
 
-/**
- * Navigates to the booking URL and retries (with rate-limit backoff) until
- * the options page loads, or timeoutMs elapses. Returns true the moment
- * this browser has "caught the slot" — this is identical for every
- * browser regardless of whether it'll end up with an account or not,
- * since that decision now happens AFTER this resolves.
- */
+
+// Closes the current context and opens a fresh one + page.
+// Called every time a rate limit is detected (initial check or mid-loop).
+// This is also what rotates the proxy IP (confirmed via testing — a plain
+// context recreation pulls a new exit IP from the rotating gateway).
+const recreateContext = async (
+  context: BrowserContext,
+  browser: Browser,
+  identifier: string
+): Promise<{ context: BrowserContext; page: Page }> => {
+  await context.close();
+
+  const newContext = await browser.newContext();
+
+  const newPage = await newContext.newPage();
+  await CookieConsentBypass(newPage, true);
+  return { context: newContext, page: newPage };
+};
+
 const navigateUntilLoaded = async (
+  context: BrowserContext,
+  browser: Browser,
   page: Page,
   identifier: string,
   bookingUrl: string,
   bot: TelegramBot,
   chatId: string | null,
   timeoutMs: number
-): Promise<boolean> => {
+): Promise<{ success: boolean; context: BrowserContext; page: Page }> => {
   const startTime = Date.now();
-  let consecutiveRateLimits = 0;
   let totalRateLimits = 0;
 
   console.log(`[${identifier}] 🔍 Title: "${await page.title()}" | URL: ${page.url()}`);
@@ -138,12 +152,12 @@ const navigateUntilLoaded = async (
   const alreadyRateLimited = await isRateLimited(page);
 
   if (alreadyRateLimited) {
-    consecutiveRateLimits++;
     totalRateLimits++;
-    sendLog(bot, chatId, identifier, `🚫 Rate limited on initial load — starting retry loop with exponential backoff`);
+    sendLog(bot, chatId, identifier, `🚫 Rate limited on initial load — rotating proxy and retrying`);
+    ({ context, page } = await recreateContext(context, browser, identifier));
   } else if (alreadyLoaded) {
     console.log(`[${identifier}] ✅ Options page already loaded on first check`);
-    return true;
+    return { success: true, context, page };
   } else {
     const title = await page.title();
     console.log(`[${identifier}] ⚠️ Page not loaded correctly. Title: "${title}"`);
@@ -156,37 +170,25 @@ const navigateUntilLoaded = async (
     const elapsed = Date.now() - startTime;
     if (elapsed > timeoutMs) {
       sendLog(bot, chatId, identifier, `⏰ Retry timeout reached (5h)\nTotal rate limits: ${totalRateLimits} — stopping retries`);
-      return false;
+      return { success: false, context, page };
     }
 
     attempts++;
 
-    const retryDelay = consecutiveRateLimits > 0
-      ? getBackoffDelay(consecutiveRateLimits, 10000, 300000)
-      : Math.floor(Math.random() * 1200) + 200; // jitter instead of flat delay when not rate-limited
-
-    if (consecutiveRateLimits > 0) {
-      console.log(`[${identifier}] 🕐 Rate limited ${consecutiveRateLimits}x — backing off ${Math.round(retryDelay / 1000)}s`);
-    }
-
-    await delay(retryDelay);
+    await delay(REFRESH_INTERVAL_MS);
 
     try {
       const navResult = await navigateWithTimeout(page, bookingUrl, identifier);
 
       if (navResult.rateLimited) {
-        consecutiveRateLimits++;
         totalRateLimits++;
-        if (consecutiveRateLimits === 1 || consecutiveRateLimits % 3 === 0) {
-          const backoff = getBackoffDelay(consecutiveRateLimits, 10000, 300000);
-          sendLog(bot, chatId, identifier, `🚫 *Rate Limited (429)*\nConsecutive: ${consecutiveRateLimits} | Total: ${totalRateLimits}\nNext retry in: ${Math.round(backoff / 1000)}s`);
+
+        ({ context, page } = await recreateContext(context, browser, identifier));
+
+        if (canSendRateLimitPing()) {
+          sendLog(bot, chatId, identifier, `🚫 Rate limits ongoing across browsers (${globalRateLimitCount} total hits so far) — proxies rotating, still trying`);
         }
         continue;
-      }
-
-      if (consecutiveRateLimits > 0) {
-        console.log(`[${identifier}] ✅ Rate limit cleared — resetting backoff`);
-        consecutiveRateLimits = 0;
       }
 
       if (!await isBookingPageLoaded(page)) {
@@ -197,7 +199,7 @@ const navigateUntilLoaded = async (
       }
 
       console.log(`[${identifier}] ✅ Options page loaded after ${attempts} attempts`);
-      return true;
+      return { success: true, context, page };
 
     } catch (navError) {
       console.error(`[${identifier}] ❌ Navigation error attempt ${attempts}:`, (navError as Error).message);
@@ -207,6 +209,8 @@ const navigateUntilLoaded = async (
     }
   }
 };
+
+
 
 /**
  * Runs once an account has been successfully claimed from the pool for
@@ -321,6 +325,8 @@ const runManualFlow = async (
 // ── Main export ─────────────────────────────────────────────────────────────
 
 const startBooking = async (
+  browser: Browser,
+  context: BrowserContext,
   page: Page,
   oid: string,
   bot: TelegramBot,
@@ -329,30 +335,29 @@ const startBooking = async (
   timeoutMs = 5 * 60 * 60 * 1000
 ) => {
   const identifier = `Browser ${displayInfo.displayNumber}`;
-  const bookingUrl = `https://www.goethe.de/coe?lang=en&oid=${oid}`;
+  const bookingUrl = `https://www.goethe.de/coe/entry?lang=en&oid=${oid}`;
 
   console.log(`[${identifier}] 🔍 Title: "${await page.title()}" | URL: ${page.url()}`);
 
   try {
     await page.waitForFunction(
       () => document.body?.innerText.trim().length > 0,
-      { timeout: 30000 }
+      { timeout: 10000 }
     );
+    console.log(`[${identifier}] ✅ Page body loaded within timeout`)
   } catch {
-    console.warn(`[${identifier}] ⚠️ Page body still empty after 30s, continuing anyway...`);
+    console.warn(`[${identifier}] ⚠️ Page body still empty after 10s, relaunching the browser...`);
+    ({ context, page } = await recreateContext(context, browser, identifier));
   }
 
-  // Navigate/retry until the booking options page loads for THIS browser —
-  // this is "catching the slot". Identical for every browser; no account
-  // decision happens until after this resolves.
-  const caught = await navigateUntilLoaded(page, identifier, bookingUrl, bot, chatId, timeoutMs);
-  if (!caught) {
-    return; // timed out without ever loading — nothing more to do
-  }
 
-  // Slot caught — NOW claim an account from the shared pool. Whichever
-  // browser gets here first gets the next account; no two browsers can
-  // ever claim the same one, since claimAccount() is serialized.
+  const result = await navigateUntilLoaded(context, browser, page, identifier, bookingUrl, bot, chatId, timeoutMs);
+  context = result.context;
+  page = result.page;
+
+  if (!result.success) {
+    return;
+  }
   const account = await accountPool.claimAccount();
 
   if (account) {

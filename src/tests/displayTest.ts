@@ -19,7 +19,7 @@ import puppeteer from "puppeteer";
 
     // Take a screenshot
     await page.screenshot({ path: "screenshot.png" });
-    console.log("Screenshot saved as screenshot.png");
+    console.log("Screenshot saved as sccreenshot.png");
 
     // Keep browser open for a bit so you can see it in noVNC
     await new Promise((resolve) => setTimeout(resolve, 150000));

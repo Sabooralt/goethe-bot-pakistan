@@ -6,6 +6,7 @@ import User, { UserDocument } from "../models/userSchema";
 import { DateTime } from "luxon";
 import dotenv from "dotenv";
 import { browserPool } from "../browser/prewarmed-browser-pool";
+import { timeNow } from "../utils/timeLog";
 dotenv.config();
 
 const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
@@ -230,6 +231,8 @@ class ExamScheduler {
               return;
             }
             console.log(`OID FOUND: ${oid}`);
+
+            timeNow("OID FOUND");
             session.status = "processing";
 
             setImmediate(() => {

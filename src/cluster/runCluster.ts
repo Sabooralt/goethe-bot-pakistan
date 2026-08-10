@@ -5,6 +5,7 @@ import { UserDocument } from "../models/userSchema";
 import dotenv from "dotenv";
 import { browserPool, PrewarmedBrowser } from "../browser/prewarmed-browser-pool";
 import { accountPool } from "../accounts/account-pool";
+import { timeNow } from "../utils/timeLog";
 
 dotenv.config();
 
@@ -85,50 +86,93 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
     console.warn("[cluster] No user resolved — account pool will be empty, all browsers run manually");
   }
 
-  // Navigate all browsers in parallel then start booking — account
-  // assignment now happens inside startBooking, at the moment each
-  // browser individually catches the slot.
+  timeNow("Initialized accounts");
   console.log(`[cluster] Redirecting ${prewarmedBrowsers.length} browsers in parallel...`);
 
-  const bookingUrl = `https://www.goethe.de/coe?lang=en&oid=${oid}`;
+  const bookingUrl = `https://www.goethe.de/coe/entry?lang=en&oid=${oid}`;
 
-  const bookingPromises = prewarmedBrowsers.map((browser) => {
-    const displayInfo = getDisplayInfo(browser);
-    const chatId = user?.telegramId || null;
+  console.log(
+    `[cluster] Redirecting ${prewarmedBrowsers.length} browsers in parallel...`
+  );
 
-    return (async () => {
-      // Navigate first
+  const redirectStart = performance.now();
+
+  const redirectResults = await Promise.all(
+    prewarmedBrowsers.map(async (browser) => {
       try {
         await browser.page.goto(bookingUrl, {
-          waitUntil: "networkidle",
+          waitUntil: "domcontentloaded",
           timeout: 60000,
         });
-        console.log(`[cluster] Browser ${browser.browserNumber} reached booking page`);
-      } catch (err) {
-        console.error(`[cluster] Browser ${browser.browserNumber} initial navigation failed:`, (err as Error).message);
-        // Don't return — pass to startBooking anyway, it handles retries
-      }
 
-      // startBooking now claims an account dynamically once it confirms
-      // the slot is actually caught for this specific browser.
-      try {
-        await startBooking(
-          browser.page,
-          oid,
-          bot,
-          displayInfo,
-          chatId,
+        console.log(
+          `[cluster] Browser ${browser.browserNumber} reached booking page`
         );
-      } catch (err) {
-        console.error(`[cluster] Browser ${browser.browserNumber} unhandled error:`, (err as Error).message);
-        sendLog(
-          `[Browser ${browser.browserNumber}] Unhandled error: ${(err as Error).message}\nAccess manually: ${displayInfo.noVncUrl}`
-        );
-      }
-    })();
-  });
 
-  // Wait for all — Promise.allSettled ensures no browser cancels another
+        return {
+          browser,
+          success: true,
+        };
+      } catch (err) {
+        console.error(
+          `[cluster] Browser ${browser.browserNumber} navigation failed:`,
+          (err as Error).message
+        );
+
+        return {
+          browser,
+          success: false,
+        };
+      }
+    })
+  );
+
+  const redirectTime = performance.now() - redirectStart;
+
+  const successfulRedirects = redirectResults.filter(
+    (result) => result.success
+  ).length;
+
+  console.log(
+    `[cluster] All redirects finished: ${successfulRedirects}/${prewarmedBrowsers.length}`
+  );
+
+  timeNow("All redirects finished")
+
+  console.log(
+    `[cluster] Total redirect time: ${redirectTime.toFixed(2)}ms`
+  );
+
+  console.log(
+    `[cluster] Total redirect time: ${(redirectTime / 1000).toFixed(3)}s`
+  );
+
+  // ============================================================
+  // PHASE 2 — ONLY NOW START BOOKING
+  // ============================================================
+
+  console.log(
+    `[cluster] Starting booking for ${successfulRedirects} browsers...`
+  );
+
+  const bookingPromises = redirectResults
+    .filter((result) => result.success)
+    .map(({ browser }) => {
+      const displayInfo = getDisplayInfo(browser);
+      const chatId = user?.telegramId || null;
+
+      return startBooking(
+        browser.browser,
+        browser.context,
+        browser.page,
+        oid,
+        bot,
+        displayInfo,
+        chatId,
+      );
+    });
+
+
   const results = await Promise.allSettled(bookingPromises);
 
   const succeeded = results.filter((r) => r.status === "fulfilled").length;

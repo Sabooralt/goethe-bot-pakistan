@@ -1,161 +1,16 @@
-import puppeteer from "puppeteer-extra";
-import StealthPlugin from "puppeteer-extra-plugin-stealth";
-
-
 import dotenv from "dotenv";
-import { Page } from "puppeteer";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
-import { browserArgs } from "../utils/browserArgs";
-import { selectAvailableModules } from "../fillers/selectAllModules";
-import { handleBookingConflict } from "../fillers/handleBookingConflict";
-
-
-const MOCK_ACCOUNT = {
-  email: "alisahar0726@gmail.com",
-  password: "0565564284Aas!!",
-  modules: {
-    read: true,
-    hear: true,
-    write: false,
-    speak: false,
-  },
-};
+import { Camoufox, LaunchOptions } from "camoufox-js";
+import { getProxyIp } from "./getIp";
 
 dotenv.config();
 
-puppeteer.use(StealthPlugin());
-
-
-
-
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-
-
-/**
- * Calculate exponential backoff delay
- */
-const getBackoffDelay = (
-  attempt: number,
-  baseDelay: number = 5000,
-  maxDelay: number = 300000
-): number => {
-  // Exponential: 5s, 10s, 20s, 40s, 80s, 160s, 300s (capped at 5min)
-  const exponentialDelay = baseDelay * Math.pow(2, Math.min(attempt - 1, 6));
-  return Math.min(exponentialDelay, maxDelay);
-};
-
-/**
- * Check if page has rate limit error (429)
- */
-const isRateLimited = async (page: Page): Promise<boolean> => {
-  try {
-    const content = await page.content();
-    const title = (await page.title()).toLowerCase();
-
-    // Check for 429 indicators
-    return (
-      content.includes("429") ||
-      content.includes("too many requests") ||
-      content.includes("rate limit") ||
-      title.includes("429") ||
-      title.includes("too many requests")
-    );
-  } catch (error) {
-    return false;
-  }
-};
-
-/**
- * Check if booking page loaded successfully
- */
-const isBookingPageLoaded = async (page: Page): Promise<boolean> => {
-  try {
-    const pageTitle = (await page.title()).toLocaleLowerCase();
-    return pageTitle.includes("options");
-  } catch (error) {
-    return false;
-  }
-};
-
-/**
- * Navigate to URL with 5 second timeout - refresh if it takes longer
- */
-const navigateWithTimeout = async (
-  page: Page,
-  url: string,
-  browserNumber: number,
-  maxAttempts = 3
-): Promise<{ success: boolean; rateLimited: boolean }> => {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      console.log(
-        `🔄 Browser ${browserNumber}: Navigation attempt ${attempt}/${maxAttempts}...`
-      );
-
-      // Try to load with 5 second timeout
-      await page.goto(url, {
-        waitUntil: "domcontentloaded",
-        timeout: 20000, // 20 seconds
-      });
-
-      // Check for rate limiting
-      const rateLimited = await isRateLimited(page);
-      if (rateLimited) {
-        console.log(`🚫 Browser ${browserNumber}: Rate limited (429) detected`);
-        return { success: false, rateLimited: true };
-      }
-
-      console.log(`✅ Browser ${browserNumber}: Page loaded within 5 seconds`);
-      return { success: true, rateLimited: false }; // Success!
-    } catch (error) {
-      const err = error as Error;
-
-      if (
-        err.message.includes("timeout") ||
-        err.message.includes("Navigation timeout")
-      ) {
-        console.log(
-          `⏰ Browser ${browserNumber}: Page took >5s to load (attempt ${attempt}/${maxAttempts}), refreshing...`
-        );
-
-        // If not the last attempt, continue to next iteration (refresh)
-        if (attempt < maxAttempts) {
-          await delay(500); // Small delay before retry
-          continue;
-        } else {
-          console.log(
-            `⚠️ Browser ${browserNumber}: All ${maxAttempts} attempts timed out, continuing anyway...`
-          );
-          return { success: false, rateLimited: false }; // Failed all attempts but continue
-        }
-      } else {
-        // Other errors (not timeout) - log and continue
-        console.error(
-          `❌ Browser ${browserNumber}: Navigation error: ${err.message}`
-        );
-        return { success: false, rateLimited: false };
-      }
-    }
-  }
-
-  return { success: false, rateLimited: false };
-};
-
-/**
- * SIMPLIFIED: Check if page already loaded, if not retry until it loads
- * Then notify user to complete booking manually
- * NOW WITH RATE LIMITING HANDLING
- */
-const startBooking = async (
-  browserNumber: number = 2,
-  oid: string,
-  timeoutMs = 5 * 60 * 60 * 1000 // 5 hours for retry loop
-) => {
-
-  const proxyHost = "pr.oxylabs.io:7777";
-  const username = "customer-Ashon_UbFVW-cc-US";
-  const password = "Ashon+482001";
+const testProxyRotation = async (browserNumber: number = 2) => {
+  const proxyHost = "p.webshare.io:80";
+  const username = "gzeckesj-rotate";
+  const password = "ooi25in29758";
 
   let proxy: any = null;
   let proxyUrl = "";
@@ -163,298 +18,126 @@ const startBooking = async (
     proxy = proxyPool.getNextProxy();
     if (proxy) {
       proxyUrl = `${proxy.host}:${proxy.port}`;
-      console.log(`🔒 Proxy ${proxyUrl} → Browser ${browserNumber}`);
+      console.log(`[proxy] Proxy ${proxyUrl} → Browser ${browserNumber}`);
     }
   }
 
-  const args = browserArgs;
+  const args: LaunchOptions = {
+    os: "windows",
+    geoip: true,
+    humanize: 1.5,
+    locale: ["en-US", "en-GB"],
+    block_images: false,
+    block_webrtc: true,
+    screen: {
+      minWidth: 1024,
+      maxWidth: 1920,
+      minHeight: 768,
+      maxHeight: 1080,
+    },
+    enable_cache: true,
+    headless: false,
+    proxy: {
+      server: proxyHost,
+      username: username,
+      password: password,
+    },
+    fonts: ["Arial", "Times New Roman"],
+    env: {
+      DISPLAY: `:${browserNumber}`,
+    },
+  };
 
- 
+  const browser = await Camoufox(args);
 
-  if (browserNumber) {
-    args.push(
-      `--display=:${browserNumber}`,
-      "--window-size=1280,720",
-    )
+  console.log("\n=== TEST 1: Same context, repeated requests ===");
+  console.log("Purpose: baseline — confirm IP is stable within a single context.\n");
+
+  const context1 = await browser.newContext({
+    extraHTTPHeaders: { Connection: "close" },
+  });
+  const page1 = await context1.newPage();
+
+  const ipsWithinContext1: string[] = [];
+  for (let i = 0; i <= 2; i++) {
+    const ip = await getProxyIp(page1);
+    console.log(`[Context 1 | Request ${i}] IP: ${ip}`);
+    ipsWithinContext1.push(ip);
+    await delay(1000);
   }
 
+  await context1.close();
+  console.log("[Context 1] Closed.\n");
 
-  const browser = await puppeteer.launch({
-    headless: false,
-    executablePath: "/usr/bin/google-chrome",
-    userDataDir: "./profile",
-    env: {
-      ...process.env,
-      DISPLAY: `:${browserNumber}`,   // uppercase, and spread process.env so Chrome still gets PATH etc.
-    },
-    args,
-    defaultViewport: null,
-  })
+  console.log("=== TEST 2: New context, no proxy override ===");
+  console.log("Purpose: does closing + reopening a context alone rotate the IP?\n");
 
-  const startTime = Date.now();
-  const bookingUrl = `https://www.goethe.de/coe?lang=en&oid=${oid}`;
+  const context2 = await browser.newContext({
+    extraHTTPHeaders: { Connection: "close" },
+  });
+  const page2 = await context2.newPage();
 
-  const page = await browser.newPage();
+  const ip2 = await getProxyIp(page2);
+  console.log(`[Context 2 | after reopen, no proxy override] IP: ${ip2}`);
 
-  await page.setViewport({ width: 1280, height: 720 });
+  await context2.close();
+  console.log("[Context 2] Closed.\n");
 
-  if (proxy && proxy.username && proxy.password) {
-    await page.authenticate({
-      username: proxy.username,
-      password: proxy.password,
+  console.log("=== TEST 3: New context, explicit proxy override ===");
+  console.log("Purpose: does Camoufox/Playwright even accept a context-level");
+  console.log("proxy override that differs from the launch-level one?\n");
+
+  let context3;
+  let proxyOverrideAccepted = true;
+  try {
+    context3 = await browser.newContext({
+      extraHTTPHeaders: { Connection: "close" },
+      proxy: {
+        server: proxyHost,
+        username: `${username}-sess${Date.now()}`, // force new session if provider supports it
+        password: password,
+      },
+    });
+  } catch (err) {
+    proxyOverrideAccepted = false;
+    console.log(`[Context 3] newContext() with proxy override threw: ${(err as Error).message}`);
+    context3 = await browser.newContext({
+      extraHTTPHeaders: { Connection: "close" },
     });
   }
 
-  await page.setRequestInterception(true);
-  page.on("request", (req: any) => {
-    const url = req.url();
-    const type = req.resourceType();
+  const page3 = await context3.newPage();
+  const ip3 = await getProxyIp(page3);
+  console.log(`[Context 3 | explicit proxy override, new session id] IP: ${ip3}`);
 
-    if (url.includes("QmiTVW") || url.includes("phtK") || url.includes("akam")) {
-      console.log(`[request] Blocked Akamai sensor: ${url.substring(0, 80)}`);
-      req.abort();
-      return;
-    }
-    req.continue();
-  });
+  await context3.close();
+  console.log("[Context 3] Closed.\n");
 
+  console.log("=== RESULTS ===");
+  console.log(`Context 1 IPs (should be identical to each other): ${ipsWithinContext1.join(", ")}`);
+  console.log(`Context 1 → Context 2 (no override) changed?      ${ipsWithinContext1[0] !== ip2}`);
+  console.log(`Context 1 → Context 3 (explicit override) changed? ${ipsWithinContext1[0] !== ip3}`);
+  console.log(`Context-level proxy override accepted without error: ${proxyOverrideAccepted}`);
 
-  await page.goto(bookingUrl, { waitUntil: "networkidle2" });
+  const withinContextStable = new Set(ipsWithinContext1).size === 1;
+  console.log(`\nIP stable within a single context: ${withinContextStable}`);
 
-  console.log("Url reached!");
-
-
-  let consecutiveRateLimits = 0;
-  let totalRateLimits = 0;
-
-  try {
-    // STEP 1: Check if page is ALREADY loaded (since we redirected before calling this)
-    console.log(
-      `🔍 Browser ${browserNumber}: Checking if booking page already loaded...`
-    );
-
-    const alreadyLoaded = await isBookingPageLoaded(page);
-    const alreadyRateLimited = await isRateLimited(page);
-
-    if (alreadyRateLimited) {
-      console.log(
-        `🚫 Browser ${browserNumber}: Page already shows rate limit (429)`
-      );
-      consecutiveRateLimits++;
-      totalRateLimits++;
-
-
-    } else if (alreadyLoaded) {
-      // SUCCESS - Page already loaded correctly!
-      console.log(
-        `✅ Browser ${browserNumber}: Booking page already loaded successfully!`
-      );
-
-
-      const availableModules = await selectAvailableModules(page, MOCK_ACCOUNT.modules);
-      if (!availableModules) {
-        console.log(
-          `⚠️ Required modules not available — stopping automation`
-        );
-        await delay(1800000);
-        return;
-      }
-
-
-
-      await page.waitForSelector("button.cs-button--arrow_next", { visible: true });
-      await page.click("button.cs-button--arrow_next");
-      console.log(`✅ Clicked next`);
-
-      await page.waitForNavigation({ waitUntil: "domcontentloaded" });
-
-      await page.waitForSelector("button.cs-layer__button--high", { visible: true });
-      const bookForButtons = await page.$$("button.cs-layer__button--high");
-      await bookForButtons[1]?.click();
-      console.log(`✅ Clicked book for me`);
-
-      await page.waitForNavigation({ waitUntil: "domcontentloaded" });
-
-      // Login
-      await page.waitForSelector("#username", { visible: true });
-      await page.type("#username", MOCK_ACCOUNT.email);
-      await page.type("#password", MOCK_ACCOUNT.password);
-      await page.click('input[type="submit"][name="submit"]');
-
-      try {
-        await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 20000 });
-      } catch {
-        console.log(
-          `❌ Login failed or timed out — check credentials\nComplete manually`
-        );
-        await delay(1800000);
-        return;
-      }
-
-      const bookingConflict = await handleBookingConflict(page);
-
-      await page.click("button.cs-button--arrow_next");
-      try {
-        await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 5000 });
-      } catch {
-        console.log(` ℹ️ No navigation after DOB step (skipped)`);
-      }
-
-      await page.click("button.cs-button--arrow_next");
-      await page.waitForNavigation({ waitUntil: "networkidle2" });
-
-      if (bookingConflict) {
-        await page.click("button.cs-button--arrow_next");
-        await page.waitForNavigation({ waitUntil: "networkidle2" });
-      }
-
-      console.log(`✅ Reached payment page`);
-
-      console.log(
-        `✅ *Redirected to payment page!*\n\n💳 Review details and complete payment manually\n⏳ ~30 min before session expires\n`
-      );
-
-      await delay(1800000);
-
-
-      // Keep browser open indefinitely for manual booking
-      console.log(
-        `🖥️ Browser ${browserNumber}: Keeping browser open for manual booking...`
-      );
-      await delay(1800000);
-
-      return;
-    } else {
-      // Page not loaded correctly - get current state for logging
-      const currentTitle = await page.title();
-      console.log(
-        `⚠️ Browser ${browserNumber}: Page not loaded correctly.Title: "${currentTitle}"`
-      );
-
-
-    }
-
-    // STEP 2: START RETRY LOOP - Page didn't load correctly or rate limited
-    console.log(
-      `🔄 Browser ${browserNumber}: Starting 5 - hour retry loop with rate limit handling...`
-    );
-
-    let attempts = 0;
-    let baseRetryDelay = 5000; // Start with 5 seconds
-
-    while (true) {
-      const elapsed = Date.now() - startTime;
-
-      if (elapsed > timeoutMs) {
-        console.log(`⏰ Browser ${browserNumber}: 5 hour timeout reached`);
-
-        return;
-      }
-
-      attempts++;
-
-      // Calculate delay based on rate limiting
-      let retryDelay = baseRetryDelay;
-
-      if (consecutiveRateLimits > 0) {
-        // Exponential backoff when rate limited
-        retryDelay = getBackoffDelay(consecutiveRateLimits, 10000, 300000); // 10s base, max 5min
-        console.log(
-          `🕐 Browser ${browserNumber}: Rate limited ${consecutiveRateLimits} times, backing off for ${Math.round(
-            retryDelay / 1000
-          )
-          }s...`
-        );
-      }
-
-      // Wait before retry
-      await delay(retryDelay);
-
-      try {
-        // Use navigateWithTimeout to reload the page
-        const navResult = await navigateWithTimeout(
-          page,
-          bookingUrl,
-          browserNumber
-        );
-
-        // Handle rate limiting
-        if (navResult.rateLimited) {
-          consecutiveRateLimits++;
-          totalRateLimits++;
-
-          const backoffTime = getBackoffDelay(
-            consecutiveRateLimits,
-            10000,
-            300000
-          );
-
-          console.log(
-            `🚫 Browser ${browserNumber}: Rate limited!(${consecutiveRateLimits} consecutive, ${totalRateLimits} total)`
-          );
-
-          // Notify on rate limits
-          if (consecutiveRateLimits === 1 || consecutiveRateLimits % 3 === 0) {
-
-          }
-
-          continue; // Skip to next iteration with exponential backoff
-        }
-
-        // Reset consecutive rate limits on successful navigation
-        if (consecutiveRateLimits > 0) {
-          console.log(
-            `✅ Browser ${browserNumber}: Rate limit cleared! Resetting backoff.`
-          );
-          consecutiveRateLimits = 0;
-        }
-
-        // Check if page loaded correctly now
-        const pageLoaded = await isBookingPageLoaded(page);
-
-        if (!pageLoaded) {
-          const retryPageTitle = await page.title();
-
-          // Notify every 20 attempts
-          if (attempts % 20 === 0) {
-            console.log(
-              `⚠️ Browser ${browserNumber}: Still seeing error(attempt ${attempts}): ${retryPageTitle} `
-            );
-
-          }
-          continue;
-        }
-
-        // SUCCESS - Page loaded!
-        console.log(
-          `✅ Browser ${browserNumber}: Page loaded successfully after ${attempts} attempts!`
-        );
-
-
-
-        // Keep browser open indefinitely for manual booking
-        console.log(
-          `🖥️ Browser ${browserNumber}: Keeping browser open for manual booking...`
-        );
-        await delay(1800000);
-        return;
-      } catch (navError) {
-        console.error(
-          `❌ Browser ${browserNumber}: Navigation error(attempt ${attempts}): `,
-          (navError as Error).message
-        );
-
-        // Notify on critical errors every 30 attempts
-        if (attempts % 30 === 0) {
-
-        }
-      }
-    }
-  } catch (err) {
-    console.error(`❌ Browser ${browserNumber}: Unexpected error: `, err);
-
-    await delay(1800000);
+  if (!withinContextStable) {
+    console.log("⚠️ IP changed even within the SAME context — your proxy endpoint");
+    console.log("   rotates per-request regardless of context/session, which changes");
+    console.log("   the whole strategy (you don't need context recreation to rotate at all).");
+  } else if (ipsWithinContext1[0] !== ip2) {
+    console.log("✅ Closing/reopening context (no proxy override) DOES rotate the IP.");
+    console.log("   Your existing recreateContext() approach is sufficient — no need");
+    console.log("   to touch context-level proxy config.");
+  } else {
+    console.log("❌ Closing/reopening context alone did NOT rotate the IP.");
+    console.log("   Your proxy is sticky at the connection/session level tied to the");
+    console.log("   browser process. You'll need explicit per-context proxy override");
+    console.log(`   (worked: ${proxyOverrideAccepted}) or a full browser relaunch to rotate.`);
   }
+
+  await browser.close();
 };
 
-startBooking(2, "7df92672ad012b16f92e42b80051961a4961952552618c08a9a59106da08b56f")
+testProxyRotation(2);
