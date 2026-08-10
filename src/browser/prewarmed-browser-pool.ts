@@ -1,4 +1,4 @@
-import { Browser, BrowserContext, BrowserContextOptions, Page, chromium } from "playwright-core";
+import { Browser, BrowserContext, Page, chromium } from "playwright-core";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
 import { Camoufox, LaunchOptions } from "camoufox-js";
 import { LaunchOptions as LaunchOptions2 } from "playwright-core";
@@ -68,11 +68,7 @@ class PrewarmedBrowserPool {
                 return "linux";
             }
 
-            const contextArgs: BrowserContextOptions = {
-                extraHTTPHeaders: {
-                    'Connection': "close"
-                }
-            };
+
 
             const args: LaunchOptions = {
                 os: pickOS(),
@@ -105,7 +101,7 @@ class PrewarmedBrowserPool {
             }
 
             if (proxy) {
-                contextArgs.proxy = {
+                args.proxy = {
                     server: proxyUrl,
                     username: proxy.username,
                     password: proxy.password
@@ -115,7 +111,12 @@ class PrewarmedBrowserPool {
             /*  const browser = await chromium.launch(args2) */
             const browser = await Camoufox(args);
 
-            const context = await browser.newContext(contextArgs);
+            const context = await browser.newContext({
+                extraHTTPHeaders: {
+                    'Connection': 'close'
+                }
+            }
+            );
 
             const page = await context.newPage();
             await page.setDefaultNavigationTimeout(180000);
