@@ -1,8 +1,14 @@
 import dotenv from "dotenv";
+import axios from "axios";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import { SocksProxyAgent } from "socks-proxy-agent";
 
 dotenv.config();
 
 export const USE_PROXIES = process.env.USE_PROXIES === "true" || false;
+
+const HEALTH_CHECK_URL = "https://api.ipify.org?format=json";
+const HEALTH_CHECK_TIMEOUT_MS = 8000; // per-proxy timeout; checks run in parallel
 
 export interface ProxyConfig {
     host: string;
@@ -16,6 +22,7 @@ class ProxyPool {
     private rotatingProxies: ProxyConfig[] = [];
     private browsersPerProxy = 10; // Each proxy handles 10 browsers
     private proxyUsage = new Map<number, number>();
+    private validated = false;
 
     constructor() {
         this.loadProxiesFromEnv();
@@ -67,6 +74,96 @@ class ProxyPool {
     }
 
     /**
+     * Builds a proxy URL string like http://user:pass@host:port
+     */
+    private buildProxyUrl(proxy: ProxyConfig): string {
+        const auth = proxy.username && proxy.password
+            ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@`
+            : "";
+        return `${proxy.type === "socks5" ? "socks5" : "http"}://${auth}${proxy.host}:${proxy.port}`;
+    }
+
+    /**
+     * Checks whether a single proxy is actually working by making a real
+     * request through it. Returns false on any error or timeout — never throws.
+     */
+    private async checkProxyHealth(proxy: ProxyConfig): Promise<boolean> {
+        const proxyUrl = this.buildProxyUrl(proxy);
+        const label = `${proxy.host}:${proxy.port}`;
+
+        try {
+            const agent = proxy.type === "socks5"
+                ? new SocksProxyAgent(proxyUrl)
+                : new HttpsProxyAgent(proxyUrl);
+
+            const response = await axios.get(HEALTH_CHECK_URL, {
+                httpAgent: agent,
+                httpsAgent: agent,
+                timeout: HEALTH_CHECK_TIMEOUT_MS,
+                proxy: false, // disable axios' own proxy handling — we're using the agent directly
+                validateStatus: (status) => status === 200,
+            });
+
+            console.log(`✅ Proxy healthy: ${label} → ${JSON.stringify(response.data)}`);
+            return true;
+        } catch (error) {
+            const message = (error as Error).message;
+            console.warn(`❌ Proxy failed health check: ${label} — ${message}`);
+            return false;
+        }
+    }
+
+    /**
+     * Validates ALL configured proxies in PARALLEL and removes any that
+     * fail. Call this once at startup before browsers are warmed up.
+     * With an 8s per-proxy timeout and parallel execution, this takes
+     * roughly 8s total regardless of how many proxies are configured
+     * (not 8s × proxy count).
+     */
+    async validateProxies(): Promise<{ working: number; failed: number; total: number }> {
+        if (this.rotatingProxies.length === 0) {
+            console.warn("⚠️ No proxies to validate");
+            this.validated = true;
+            return { working: 0, failed: 0, total: 0 };
+        }
+
+        console.log(`🔍 Validating ${this.rotatingProxies.length} proxies in parallel...`);
+        const startTime = Date.now();
+
+        const results = await Promise.all(
+            this.rotatingProxies.map(async (proxy) => ({
+                proxy,
+                healthy: await this.checkProxyHealth(proxy),
+            }))
+        );
+
+        const elapsed = Date.now() - startTime;
+
+        const workingProxies = results.filter((r) => r.healthy).map((r) => r.proxy);
+        const failedCount = results.length - workingProxies.length;
+
+        this.rotatingProxies = workingProxies;
+
+        // Rebuild usage map to match the new (filtered) index positions
+        this.proxyUsage.clear();
+        for (let i = 0; i < this.rotatingProxies.length; i++) {
+            this.proxyUsage.set(i, 0);
+        }
+
+        this.validated = true;
+
+        console.log(
+            `📊 Proxy validation complete in ${elapsed}ms: ${workingProxies.length} working, ${failedCount} failed`
+        );
+
+        if (workingProxies.length === 0) {
+            console.error("🚨 NO WORKING PROXIES — proxy-dependent browsers will get none");
+        }
+
+        return { working: workingProxies.length, failed: failedCount, total: results.length };
+    }
+
+    /**
      * Get proxy for specific browser number
      * Automatically distributes browsers across available rotating proxies
      * 
@@ -76,8 +173,12 @@ class ProxyPool {
      * - 3 proxies: Browsers 1-10 use proxy 1, 11-20 use proxy 2, 21-30 use proxy 3
      */
     getProxyForBrowser(browserNumber: number): ProxyConfig | null {
+        if (!this.validated) {
+            console.warn("⚠️ getProxyForBrowser called before validateProxies() — returning unvalidated proxy");
+        }
+
         if (this.rotatingProxies.length === 0) {
-            console.warn(`⚠️ No proxies configured for browser ${browserNumber}`);
+            console.warn(`⚠️ No working proxies available for browser ${browserNumber}`);
             return null;
         }
 
@@ -122,6 +223,7 @@ class ProxyPool {
 
     getStatus(): {
         enabled: boolean;
+        validated: boolean;
         totalRotatingProxies: number;
         browsersPerProxy: number;
         maxBrowsers: number;
@@ -136,6 +238,7 @@ class ProxyPool {
 
         return {
             enabled: USE_PROXIES,
+            validated: this.validated,
             totalRotatingProxies: this.rotatingProxies.length,
             browsersPerProxy: this.browsersPerProxy,
             maxBrowsers: this.rotatingProxies.length * this.browsersPerProxy,

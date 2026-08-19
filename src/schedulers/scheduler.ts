@@ -547,6 +547,46 @@ class ExamScheduler {
     await this.startMonitoringSession(schedule);
   }
 
+  async stopAllSchedulesForUser(
+    userId: string
+  ): Promise<{ stoppedCount: number; scheduleIds: string[] }> {
+    const schedules = await Schedule.find({
+      createdBy: userId,
+      completed: false,
+    });
+
+    if (schedules.length === 0) {
+      return { stoppedCount: 0, scheduleIds: [] };
+    }
+
+    const scheduleIds = schedules.map((s) => s.id.toString());
+
+    console.log(`[scheduler] /killall by user ${userId} — stopping monitor + browser pool`);
+    examMonitor.stopPolling();
+    await examMonitor.destroy();
+    await browserPool.closeAllBrowsers();
+
+    for (const id of scheduleIds) {
+      this.activeMonitoringSessions.delete(id);
+    }
+
+    await Schedule.updateMany(
+      { _id: { $in: scheduleIds } },
+      {
+        completed: true,
+        status: "stopped",
+        lastError: "Stopped by user (kill all)",
+        lastRun: new Date(),
+      }
+    );
+
+    console.log(
+      `[scheduler] Stopped ${scheduleIds.length} schedule(s) for user ${userId}`
+    );
+
+    return { stoppedCount: scheduleIds.length, scheduleIds };
+  }
+
   async getScheduleInfo(scheduleId: string): Promise<any> {
     const schedule = await Schedule.findById(scheduleId).populate("createdBy");
     const session = this.activeMonitoringSessions.get(scheduleId);

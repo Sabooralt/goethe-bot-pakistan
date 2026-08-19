@@ -576,7 +576,7 @@ class ExamMonitor {
     }
   }
 
-  async forceStopPolling(maxWaitMs = 5000): Promise<void> {
+  async forceStopPolling(maxWaitMs = 2000): Promise<void> {
     this.shouldStopPolling = true;
     this.stopPolling();
 
@@ -619,6 +619,7 @@ class ExamMonitor {
     await this.closeBrowser();
     this.apiUrl = null;
     this.processedOids.clear();
+    this.processingOid = false;
     this.consecutiveErrors = 0;
     this.lockedExam = null;
     this.pollCount = 0;

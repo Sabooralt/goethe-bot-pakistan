@@ -101,6 +101,7 @@ class PrewarmedBrowserPool {
             }
 
             if (proxy) {
+                console.log(`[browser] ${browserNumber} → Using Proxy: ${proxyUrl}`);
                 args.proxy = {
                     server: proxyUrl,
                     username: proxy.username,

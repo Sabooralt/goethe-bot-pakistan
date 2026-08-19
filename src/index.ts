@@ -8,6 +8,7 @@ import Schedule from "./models/scheduleSchema";
 import { examScheduler } from "./schedulers/scheduler";
 import { DateTime } from "luxon";
 import { readMockData, writeMockData } from "./mock-data/routes";
+import { proxyPool } from "./proxyPool";
 
 dotenv.config();
 
@@ -90,7 +91,7 @@ app.post("/api/trigger-booking", async (req: Request, res: Response) => {
     const oid = process.env.TEST_OID || "";
     const examIndex = 0;
 
-    
+
 
     // Check if exam exists
     if (!mockData.DATA[examIndex]) {
@@ -338,6 +339,8 @@ export const bot = new TelegramBot(token, { polling: true });
         );
       });
 
+      await proxyPool.validateProxies();
+
       if (schedulerRunning) {
         console.log("⚠️ Scheduler already running, skipping startup");
         return;
@@ -408,6 +411,18 @@ export const bot = new TelegramBot(token, { polling: true });
 
     const test_mode = process.env.TEST_MODE === "true" ? "True" : "False";
     await bot.sendMessage(chatId, test_mode);
+  });
+
+  bot.onText(/\/killall/, async (msg) => {
+    const chatId = msg.chat.id.toString();
+    await bot.sendMessage(chatId, "⚠️ Stop ALL your active schedules?", {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "🛑 Yes, stop everything", callback_data: "killall_confirm" },
+          { text: "Cancel", callback_data: "killall_cancel" },
+        ]],
+      },
+    });
   });
 
   bot.onText(/\/start/, async (msg) => {
@@ -675,35 +690,208 @@ export const bot = new TelegramBot(token, { polling: true });
     const data = callbackQuery.data;
     const messageId = callbackQuery.message?.message_id;
 
-    if (!chatId || !messageId) return;
+    if (!chatId || !messageId || !data) return;
 
     await bot.answerCallbackQuery(callbackQuery.id);
 
     try {
+      // ==========================================
+      // CANCEL
+      // ==========================================
+
       if (data === "cancel") {
         clearUserState(userId);
-        showMainMenu(chatId, "Operation cancelled. Choose an option:");
+        showMainMenu(
+          chatId,
+          "Operation cancelled. Choose an option:"
+        );
         return;
       }
 
+      // ==========================================
+      // VIEW SCHEDULES PAGINATION
+      // ==========================================
+
+      if (data.startsWith("view_schedules_")) {
+        const page = Number(data.replace("view_schedules_", ""));
+
+        if (Number.isNaN(page)) {
+          console.error(
+            "Invalid schedules page:",
+            data
+          );
+          return;
+        }
+
+        await viewSchedules(
+          chatId,
+          userId,
+          messageId,
+          page
+        );
+
+        return;
+      }
+
+      // ==========================================
+      // COMPLETED / PAGE INFO
+      // ==========================================
+
+      if (data === "schedules_page_info") {
+        await bot.answerCallbackQuery(
+          callbackQuery.id,
+          {
+            text: "Use the arrows to navigate schedules.",
+            show_alert: false,
+          }
+        );
+
+        return;
+      }
+
+      // ==========================================
+      // KILL ALL CONFIRM
+      // ==========================================
+
+      if (data === "killall_confirm") {
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          {
+            chat_id: chatId,
+            message_id: messageId,
+          }
+        );
+
+        try {
+          const user = await User.findOne({
+            telegramId: userId,
+          });
+
+          if (!user) {
+            await bot.sendMessage(
+              chatId,
+              "❌ User not found."
+            );
+            return;
+          }
+
+          await bot.sendMessage(
+            chatId,
+            "🛑 Stopping all schedules..."
+          );
+
+          const result =
+            await examScheduler.stopAllSchedulesForUser(
+              user._id.toString()
+            );
+
+          if (result.stoppedCount === 0) {
+            await bot.sendMessage(
+              chatId,
+              "✅ No active schedules to stop."
+            );
+          } else {
+            await bot.sendMessage(
+              chatId,
+              `🛑 *All Schedules Stopped*\n\n` +
+              `Stopped ${result.stoppedCount} schedule(s)\n` +
+              `Browsers closed, monitoring halted.`,
+              {
+                parse_mode: "Markdown",
+              }
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Error in killall_confirm:",
+            error
+          );
+
+          await bot.sendMessage(
+            chatId,
+            `❌ Failed to stop schedules: ${(error as Error).message
+            }`
+          );
+        }
+
+        showMainMenu(
+          chatId,
+          "What would you like to do next?"
+        );
+
+        return;
+      }
+
+      // ==========================================
+      // KILL ALL CANCEL
+      // ==========================================
+
+      if (data === "killall_cancel") {
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          {
+            chat_id: chatId,
+            message_id: messageId,
+          }
+        );
+
+        await bot.sendMessage(
+          chatId,
+          "Cancelled — nothing was stopped."
+        );
+
+        showMainMenu(
+          chatId,
+          "What would you like to do next?"
+        );
+
+        return;
+      }
+
+      // ==========================================
+      // OTHER CALLBACKS
+      // ==========================================
+
       const userState = getUserState(userId);
+
       switch (userState.state) {
         case STATES.IDLE:
-          await handleMainMenuCallback(chatId, userId, data, messageId);
+          await handleMainMenuCallback(
+            chatId,
+            userId,
+            data,
+            messageId
+          );
           break;
+
         case STATES.SELECTING_MODULES:
-          await handleModuleCallback(chatId, userId, data, userState);
+          await handleModuleCallback(
+            chatId,
+            userId,
+            data,
+            userState
+          );
           break;
+
         default:
-          showMainMenu(chatId, "Please use the menu to navigate:");
+          showMainMenu(
+            chatId,
+            "Please use the menu to navigate:"
+          );
       }
     } catch (error) {
-      console.error("Error handling callback query:", error);
+      console.error(
+        "Error handling callback query:",
+        error
+      );
+
       clearUserState(userId);
+
       await bot.sendMessage(
         chatId,
         "❌ Sorry, there was an error. Please try again."
       );
+
       showMainMenu(chatId);
     }
   });
@@ -1393,56 +1581,122 @@ export const bot = new TelegramBot(token, { polling: true });
   const viewSchedules = async (
     chatId: number,
     userId: string,
-    messageId: number
+    messageId?: number,
+    page: number = 0
   ) => {
     try {
+      const escapeHtml = (text: string) =>
+        String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+
+      const PAGE_SIZE = 10;
+
+      // Remove previous inline keyboard
       if (messageId) {
-        await bot.editMessageReplyMarkup(
-          { inline_keyboard: [] },
-          {
-            chat_id: chatId,
-            message_id: messageId,
-          }
+        try {
+          await bot.editMessageReplyMarkup(
+            { inline_keyboard: [] },
+            {
+              chat_id: chatId,
+              message_id: messageId,
+            }
+          );
+        } catch (error) {
+          console.log("Could not remove previous keyboard:", error);
+        }
+      }
+
+      if (page === 0) {
+        await bot.sendMessage(
+          chatId,
+          "🔍 Fetching your schedules..."
         );
       }
-      await bot.sendMessage(chatId, "🔍 Fetching your schedules...");
 
-      const user = await User.findOne({ telegramId: userId });
+      const user = await User.findOne({
+        telegramId: userId,
+      });
+
       if (!user) {
         await bot.sendMessage(
           chatId,
           "❌ User not found. Please start with /start command."
         );
+
         showMainMenu(chatId);
         return;
       }
 
-      // Get all schedules (not just incomplete ones)
       const schedules = await Schedule.find({
         createdBy: user._id,
-      }).sort({ runAt: -1, createdAt: -1 });
+      }).sort({
+        runAt: -1,
+        createdAt: -1,
+      });
 
       if (schedules.length === 0) {
-        await bot.sendMessage(chatId, "📅 You have no schedules.");
+        await bot.sendMessage(
+          chatId,
+          "📅 You have no schedules."
+        );
+
         showMainMenu(chatId, "What would you like to do next?");
         return;
       }
 
-      // Separate active and completed schedules
-      const activeSchedules = schedules.filter((s) => !s.completed);
-      const completedSchedules = schedules.filter((s) => s.completed);
+      // Separate schedules
+      const activeSchedules = schedules.filter(
+        (s) => !s.completed
+      );
+
+      const completedSchedules = schedules.filter(
+        (s) => s.completed
+      );
+
+      // Pagination
+      const totalPages = Math.max(
+        1,
+        Math.ceil(activeSchedules.length / PAGE_SIZE)
+      );
+
+      const currentPage = Math.min(
+        Math.max(page, 0),
+        totalPages - 1
+      );
+
+      const startIndex = currentPage * PAGE_SIZE;
+
+      const paginatedActiveSchedules = activeSchedules.slice(
+        startIndex,
+        startIndex + PAGE_SIZE
+      );
 
       let messageText = "";
 
-      // Active Schedules
-      if (activeSchedules.length > 0) {
-        messageText += `🔵 **Active Schedules (${activeSchedules.length})**\n\n`;
+      // ==========================================
+      // ACTIVE SCHEDULES
+      // ==========================================
 
-        for (const [index, schedule] of activeSchedules.entries()) {
-          const runTime = schedule.runAt.toLocaleString();
+      if (activeSchedules.length > 0) {
+        messageText +=
+          `🔵 <b>Active Schedules (${activeSchedules.length})</b>\n\n`;
+
+        for (
+          const [index, schedule] of paginatedActiveSchedules.entries()
+        ) {
+          const actualIndex = startIndex + index + 1;
+
+          const runTime = schedule.runAt
+            ? schedule.runAt.toLocaleString()
+            : "Unknown";
+
           const lastRun = schedule.lastRun
             ? schedule.lastRun.toLocaleString()
             : "Never";
+
           const retryInfo =
             schedule.retryCount !== undefined
               ? `${schedule.retryCount}/${schedule.maxRetries || 5}`
@@ -1450,101 +1704,244 @@ export const bot = new TelegramBot(token, { polling: true });
 
           // Status emoji
           let statusEmoji = "⏳";
-          if (schedule.status === "running") statusEmoji = "🔄";
-          else if (schedule.status === "paused") statusEmoji = "⏸️";
-          else if (schedule.status === "failed") statusEmoji = "❌";
-          else if (schedule.status === "pending") statusEmoji = "⏳";
 
-          messageText += `${index + 1}. ${statusEmoji} **${schedule.name}**\n`;
-          messageText += `   ⏰ **Target:** ${runTime}\n`;
-          messageText += `   🆔 **ID:** \`${schedule._id}\`\n`;
-          messageText += `   📊 **Status:** ${schedule.status || "pending"}\n`;
-          messageText += `   🔁 **Retries:** ${retryInfo}\n`;
+          switch (schedule.status) {
+            case "running":
+              statusEmoji = "🔄";
+              break;
+
+            case "paused":
+              statusEmoji = "⏸️";
+              break;
+
+            case "failed":
+              statusEmoji = "❌";
+              break;
+
+            case "pending":
+              statusEmoji = "⏳";
+              break;
+          }
+
+          const scheduleName = escapeHtml(
+            schedule.name || "Unnamed Schedule"
+          );
+
+          const scheduleId = escapeHtml(
+            String(schedule._id)
+          );
+
+          const status = escapeHtml(
+            schedule.status || "pending"
+          );
+
+          messageText +=
+            `${actualIndex}. ${statusEmoji} <b>${scheduleName}</b>\n`;
+
+          messageText +=
+            `   ⏰ <b>Target:</b> ${escapeHtml(runTime)}\n`;
+
+          messageText +=
+            `   🆔 <b>ID:</b> <code>${scheduleId}</code>\n`;
+
+          messageText +=
+            `   📊 <b>Status:</b> ${status}\n`;
+
+          messageText +=
+            `   🔁 <b>Retries:</b> ${escapeHtml(retryInfo)}\n`;
 
           if (schedule.lastRun) {
-            messageText += `   📅 *Last Run:* ${lastRun}\n`;
+            messageText +=
+              `   📅 <i>Last Run:</i> ${escapeHtml(lastRun)}\n`;
           }
 
           if (schedule.lastError) {
             const errorPreview =
-              schedule.lastError.length > 50
-                ? schedule.lastError.substring(0, 50) + "..."
+              schedule.lastError.length > 80
+                ? schedule.lastError.substring(0, 80) + "..."
                 : schedule.lastError;
-            messageText += `   ⚠️ *Last Error:* ${errorPreview}\n`;
+
+            messageText +=
+              `   ⚠️ <i>Last Error:</i> ${escapeHtml(errorPreview)}\n`;
           }
 
-          messageText += `   🔧 *Monitoring:* ${schedule.monitoringStarted ? "Yes" : "No"
+          messageText +=
+            `   🔧 <i>Monitoring:</i> ${schedule.monitoringStarted ? "Yes" : "No"
             }\n`;
 
-          // Quick action commands
-          messageText += `   **Commands:** `;
-          const commands = [];
+          // Commands
+          const id = String(schedule._id);
+
+          const commands: string[] = [];
 
           if (schedule.status === "failed") {
-            commands.push(`/retry_${schedule._id}`);
+            commands.push(`/retry_${id}`);
           }
-          if (schedule.status === "running" || schedule.status === "pending") {
-            commands.push(`/pause_${schedule._id}`);
-          }
-          if (schedule.status === "paused") {
-            commands.push(`/resume_${schedule._id}`);
-          }
-          commands.push(`/status_${schedule._id}`);
-          commands.push(`/stop_${schedule._id}`);
 
-          messageText += commands.join(" | ") + "\n\n";
+          if (
+            schedule.status === "running" ||
+            schedule.status === "pending"
+          ) {
+            commands.push(`/pause_${id}`);
+          }
+
+          if (schedule.status === "paused") {
+            commands.push(`/resume_${id}`);
+          }
+
+          commands.push(`/status_${id}`);
+          commands.push(`/stop_${id}`);
+
+          messageText +=
+            `   <b>Commands:</b> ${escapeHtml(
+              commands.join(" | ")
+            )}\n\n`;
+        }
+
+        if (totalPages > 1) {
+          messageText +=
+            `<i>Page ${currentPage + 1} of ${totalPages}</i>\n\n`;
         }
       }
 
-      // Completed Schedules (show last 5)
+      // ==========================================
+      // COMPLETED SCHEDULES
+      // ==========================================
+
       if (completedSchedules.length > 0) {
-        messageText += `\n✅ **Completed Schedules (Last ${Math.min(
-          5,
-          completedSchedules.length
-        )})**\n\n`;
+        const completedToShow =
+          completedSchedules.slice(0, 5);
 
-        for (const [index, schedule] of completedSchedules
-          .slice(0, 5)
-          .entries()) {
-          const runTime = schedule.runAt.toLocaleString();
+        messageText +=
+          `\n✅ <b>Completed Schedules (Last ${completedToShow.length})</b>\n\n`;
 
-          // Status emoji for completed
+        for (
+          const [index, schedule] of completedToShow.entries()
+        ) {
+          const runTime = schedule.runAt
+            ? schedule.runAt.toLocaleString()
+            : "Unknown";
+
           let statusEmoji = "✅";
-          if (schedule.status === "stopped") statusEmoji = "🛑";
-          else if (schedule.status === "failed") statusEmoji = "❌";
 
-          messageText += `${index + 1}. ${statusEmoji} **${schedule.name}**\n`;
-          messageText += `   ⏰ **Target:** ${runTime}\n`;
-          messageText += `   📊 **Final Status:** ${schedule.status}\n`;
+          if (schedule.status === "stopped") {
+            statusEmoji = "🛑";
+          } else if (schedule.status === "failed") {
+            statusEmoji = "❌";
+          }
+
+          messageText +=
+            `${index + 1}. ${statusEmoji} <b>${escapeHtml(
+              schedule.name || "Unnamed Schedule"
+            )}</b>\n`;
+
+          messageText +=
+            `   ⏰ <b>Target:</b> ${escapeHtml(runTime)}\n`;
+
+          messageText +=
+            `   📊 <b>Final Status:</b> ${escapeHtml(
+              schedule.status || "unknown"
+            )}\n`;
 
           if (schedule.lastRun) {
-            messageText += `   📅 *Completed:* ${schedule.lastRun.toLocaleString()}\n`;
+            messageText +=
+              `   📅 <i>Completed:</i> ${escapeHtml(
+                schedule.lastRun.toLocaleString()
+              )}\n`;
           }
 
           messageText += "\n";
         }
 
         if (completedSchedules.length > 5) {
-          messageText += `_...and ${completedSchedules.length - 5
-            } more completed schedules_\n\n`;
+          messageText +=
+            `<i>...and ${completedSchedules.length - 5
+            } more completed schedules</i>\n\n`;
         }
       }
 
-      messageText += `\n💡 **Tips:**\n`;
-      messageText += `• Use /status_<id> to view detailed status\n`;
-      messageText += `• Failed schedules can be retried up to 5 times\n`;
-      messageText += `• Type /schedulehelp for all commands\n`;
-      messageText += `• Use "Remove schedule" to delete schedules`;
+      // ==========================================
+      // TIPS
+      // ==========================================
 
-      await bot.sendMessage(chatId, messageText, { parse_mode: "Markdown" });
+      messageText += "\n💡 <b>Tips:</b>\n";
+      messageText +=
+        "• Use /status_&lt;id&gt; to view detailed status\n";
+      messageText +=
+        "• Failed schedules can be retried up to 5 times\n";
+      messageText +=
+        "• Type /schedulehelp for all commands\n";
+      messageText +=
+        '• Use "Remove schedule" to delete schedules';
 
-      showMainMenu(chatId, "What would you like to do next?");
+      // ==========================================
+      // PAGINATION KEYBOARD
+      // ==========================================
+
+      const keyboard: any[][] = [];
+
+      if (totalPages > 1) {
+        const paginationRow: any[] = [];
+
+        if (currentPage > 0) {
+          paginationRow.push({
+            text: "⬅️ Previous",
+            callback_data: `view_schedules_${currentPage - 1}`,
+          });
+        }
+
+        paginationRow.push({
+          text: `${currentPage + 1}/${totalPages}`,
+          callback_data: "schedules_page_info",
+        });
+
+        if (currentPage < totalPages - 1) {
+          paginationRow.push({
+            text: "Next ➡️",
+            callback_data: `view_schedules_${currentPage + 1}`,
+          });
+        }
+
+        keyboard.push(paginationRow);
+      }
+
+      keyboard.push([
+        {
+          text: "🔄 Refresh",
+          callback_data: `view_schedules_${currentPage}`,
+        },
+      ]);
+
+      // ==========================================
+      // SEND
+      // ==========================================
+
+      await bot.sendMessage(chatId, messageText, {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: keyboard,
+        },
+      });
+
+      showMainMenu(
+        chatId,
+        "What would you like to do next?"
+      );
     } catch (error) {
       console.error("Error viewing schedules:", error);
-      await bot.sendMessage(
-        chatId,
-        "❌ Failed to retrieve schedules. Please try again."
-      );
+
+      try {
+        await bot.sendMessage(
+          chatId,
+          "❌ Failed to retrieve schedules. Please try again."
+        );
+      } catch (sendError) {
+        console.error(
+          "Failed to send error message:",
+          sendError
+        );
+      }
+
       showMainMenu(chatId);
     }
   };
