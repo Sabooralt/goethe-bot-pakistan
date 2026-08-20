@@ -291,8 +291,6 @@ const runAutomatedFlow = async (
     notifyBookingCompleted(page, bot, chatId, identifier);
     await delay(7200000);
 
-    account.status = false;
-    await account.save();
 
     sendLog(bot, chatId, identifier,
       `⏰ Session timeout — account disabled\nIf payment was completed, booking is confirmed`

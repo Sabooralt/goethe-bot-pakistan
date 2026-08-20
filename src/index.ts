@@ -8,7 +8,6 @@ import Schedule from "./models/scheduleSchema";
 import { examScheduler } from "./schedulers/scheduler";
 import { DateTime } from "luxon";
 import { readMockData, writeMockData } from "./mock-data/routes";
-import { proxyPool } from "./proxyPool";
 
 dotenv.config();
 
@@ -339,7 +338,6 @@ export const bot = new TelegramBot(token, { polling: true });
         );
       });
 
-      await proxyPool.validateProxies();
 
       if (schedulerRunning) {
         console.log("⚠️ Scheduler already running, skipping startup");
