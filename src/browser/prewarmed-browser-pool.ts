@@ -90,9 +90,19 @@ class PrewarmedBrowserPool {
                 }
             };
 
+            const UNPROXIED_BROWSER_NUMBERS = new Set(
+                (process.env.UNPROXIED_BROWSER_NUMBERS || "8,11")
+                    .split(",")
+                    .map((n) => parseInt(n.trim()))
+                    .filter((n) => !Number.isNaN(n))
+            );
+
             let proxy: any = null;
             let proxyUrl = "";
-            if (USE_PROXIES) {
+
+            if (UNPROXIED_BROWSER_NUMBERS.has(browserNumber)) {
+                console.log(`[proxy] Browser ${browserNumber} → intentionally unproxied (hedge browser)`);
+            } else if (USE_PROXIES) {
                 proxy = proxyPool.getNextProxy();
                 if (proxy) {
                     proxyUrl = `${proxy.host}:${proxy.port}`;
@@ -108,7 +118,6 @@ class PrewarmedBrowserPool {
                     password: proxy.password
                 };
             }
-
             /*  const browser = await chromium.launch(args2) */
             const browser = await Camoufox(args);
 
