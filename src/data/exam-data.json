@@ -1,24 +1,543 @@
 {
+  "LANGID": "1",
   "DATA": [
     {
-      "examId": "EXAM001",
-      "moduleId": "MOD001",
-      "locationName": "Mumbai - Goethe Institute",
-      "locationCode": "KHI-GI",
-      "language": "German",
-      "level": "A1",
-      "startDate": "2026-05-10",
-      "endDate": "2026-05-10",
-      "examTime": "09:00",
-      "bookFrom": "07.07.2026",
-      "bookFromTime": "15:00:00.000",
-      "capacity": 30,
-      "availableSeats": 30,
-      "price": 15000,
-      "currency": "INR",
-      "oid": "17231ce0a55a3f04e67a10e6de16446c77b03b05449cb45ca30d61f6f219a326",
-      "status": "upcoming",
-      "bookFromStamp": "2026-07-07T10:00:00.000Z"
+      "moduleId": "SM05004418",
+      "isExam": true,
+      "isModular": false,
+      "isDigital": false,
+      "isDdpActive": false,
+      "isBlended": false,
+      "isOnlyBookAllExamParts": true,
+      "ageFrom": 16,
+      "ageTo": 99,
+      "publishFrom": "25.08.2026",
+      "publishFromTime": "09:00:00.000",
+      "publishTo": "11.09.2026",
+      "publishToTime": "23:59:59.000",
+      "bookFrom": "28.08.2026",
+      "bookFromTime": "13:51:00.000",
+      "bookTo": "11.09.2026",
+      "bookToTime": "23:59:59.000",
+      "startDate": "11.09.2026",
+      "endDate": "13.09.2026",
+      "startTime": "00:00:00.000",
+      "endTime": "00:00:00.000",
+      "locationId": "F 05001563",
+      "locationName": "Islamabad",
+      "category": "E004",
+      "languageLevel": "A1",
+      "targetGroupExam": "ER",
+      "targetGroupCourse": "",
+      "onlyWithAcc": false,
+      "checkForAccommodation": false,
+      "startMonth": 9,
+      "durationWeeks": 0,
+      "teachingUnitsPerWeek": 0,
+      "teachingUnitsTotal": 0,
+      "pspElement": "ASA1",
+      "price": " 30000 ",
+      "priceInternal": " 18150 ",
+      "priceRate": 30000,
+      "priceInternRate": 18150,
+      "currency": "PKR",
+      "availability": 11,
+      "capacityOptimal": 0,
+      "capacityMax": 0,
+      "isOnlineCourse": false,
+      "isIndividualCourse": false,
+      "lastUpdated": "2026-08-25T09:49:18.000",
+      "variantId": "",
+      "acadYear": "2026",
+      "acadPeriod": "021",
+      "evObId": "",
+      "institutIdFlw": "",
+      "smModuleIdFlw": "",
+      "variantIdFlw": "",
+      "evObIdFlw": "",
+      "isYouthCourse": false,
+      "isOnlineLiveCourse": false,
+      "isSingleBooking": true,
+      "isGroupBooking": false,
+      "keyAccounts": [],
+      "datesPerWeek": 0,
+      "isClass": false,
+      "instituteId": "O 10000366",
+      "estBillableWithCourse": false,
+      "estMandatory": false,
+      "estBillableMonth": 0,
+      "paymentModes": [
+        {
+          "paymentMode": "RECH",
+          "cardType": ""
+        }
+      ],
+      "publishFromStamp": "2026-08-25T04:00:00.000Z",
+      "publishToStamp": "2026-09-11T18:59:59.000Z",
+      "bookToStamp": "2026-09-11T18:59:59.000Z",
+      "supportLanguages": [],
+      "targetGroup": "ER",
+      "priceForRanges": [],
+      "airports": [],
+      "modules": [
+        {
+          "ceId": "CE05006041",
+          "type": "0014",
+          "startTime": "00:00:00.000",
+          "endTime": "00:00:00.000",
+          "minutesExamDuration": "000",
+          "minutesExamLeadTime": "000",
+          "isOdpExam": false
+        },
+        {
+          "ceId": "CE05006042",
+          "type": "0021",
+          "startTime": "00:00:00.000",
+          "endTime": "00:00:00.000",
+          "minutesExamDuration": "000",
+          "minutesExamLeadTime": "000",
+          "isOdpExam": false
+        }
+      ],
+      "modularPrices": [],
+      "clevels": [],
+      "smTexts": [
+        {
+          "textKey": "SM05004418000000009005deO 10000366",
+          "objectId": "SM05004418",
+          "eventId": "00000000",
+          "type": "9005",
+          "lang": "de",
+          "text": "Goethe-Zertifikat A1: Start Deutsch 1"
+        },
+        {
+          "textKey": "SM05004418000000009006deO 10000366",
+          "objectId": "SM05004418",
+          "eventId": "00000000",
+          "type": "9006",
+          "lang": "de",
+          "text": "<h2>Prüfungsstruktur</h2><div>Die Prüfung besteht aus folgenden Teilprüfungen:</div><div>Hören   20 Minuten</div><div>Lesen    25 Minuten</div><div>Schreiben 20 Minuten</div><div>Sprechen  15 Minuten</div><div><br/></div><h2>Zugangsvoraussetzungen</h2><div>Empfohlen ab 16 Jahre</div><div><br/></div><h2>Mindestteilnehmerzahl</h2><div>Die Mindestteilnehmerzahl beträgt 10 Personen. Es kann natürlich auch bei uns vorkommen, dass die Mindestteilnehmerzahl nicht erreicht wird und eine Prüfung deshalb nicht zu Stande kommt. In diesem Fall werden wir versuchen, Ihnen frühzeitig eine Alternative anzubieten. Möchten Sie diese nicht akzeptieren, erhalten Sie die bereits geleisteten Zahlungen umgehend zurück.</div>"
+        },
+        {
+          "textKey": "SM05004418000000009006enO 10000366",
+          "objectId": "SM05004418",
+          "eventId": "00000000",
+          "type": "9006",
+          "lang": "en",
+          "text": "<h2>Parts of the exam</h2><div>The exam consists of the following parts:</div><div>Listening 20 minutes</div><div>Reading 25 minutes</div><div>Writing 20 minutes</div><div>Speaking 15 minutes</div><div><br/></div><h2>Prerequisites for participation</h2><div>recommended from 16 years of age</div><div><br/></div><h2>Minimum number of participants</h2><div>The minimum number of participants is 10. If the minimum number of participants is not reached, the examination will not take place as a consequence. In such a case, we will do our best to offer you an alternative in good time. If you do not want to accept the suggested alternative, any payments already made will be promptly refunded.</div>"
+        }
+      ],
+      "eventTexts": [],
+      "locationTexts": [
+        {
+          "textKey": "F 05001563000000009005deO 10000366",
+          "objectId": "F 05001563",
+          "eventId": "00000000",
+          "type": "9005",
+          "lang": "de",
+          "text": "Islamabad"
+        },
+        {
+          "textKey": "F 05001563000000009005enO 10000366",
+          "objectId": "F 05001563",
+          "eventId": "00000000",
+          "type": "9005",
+          "lang": "en",
+          "text": "Islamabad"
+        },
+        {
+          "textKey": "F 05001563000000009008deO 10000366",
+          "objectId": "F 05001563",
+          "eventId": "00000000",
+          "type": "9008",
+          "lang": "de",
+          "text": "Goethe-Institut Pakistan <br/>4 Khayaban-e-Johar, H 9/4 H-9, Islamabad, 44000"
+        },
+        {
+          "textKey": "F 05001563000000009008enO 10000366",
+          "objectId": "F 05001563",
+          "eventId": "00000000",
+          "type": "9008",
+          "lang": "en",
+          "text": "Goethe-Institut Pakistan <br/>4 Khayaban-e-Johar, H 9/4 H-9, Islamabad, 44000"
+        }
+      ],
+      "defaultLanguage": "de",
+      "majorityAge": "18",
+      "courseDurationUnit": "0",
+      "ueConversionFactor": 0.75,
+      "languageLevelArray": [
+        "A",
+        "1"
+      ],
+      "languageLevelBase": "A1",
+      "skillLevel": null,
+      "filter_languagelevelmin": "A1",
+      "filter_languagelevelmax": "A1",
+      "eventName": "Goethe-Zertifikat A1: Start Deutsch 1",
+      "eventDescription": "<h2>Parts of the exam</h2><div>The exam consists of the following parts:</div><div>Listening 20 minutes</div><div>Reading 25 minutes</div><div>Writing 20 minutes</div><div>Speaking 15 minutes</div><div><br/></div><h2>Prerequisites for participation</h2><div>recommended from 16 years of age</div><div><br/></div><h2>Minimum number of participants</h2><div>The minimum number of participants is 10. If the minimum number of participants is not reached, the examination will not take place as a consequence. In such a case, we will do our best to offer you an alternative in good time. If you do not want to accept the suggested alternative, any payments already made will be promptly refunded.</div>",
+      "eventWeekdays": "",
+      "eventNameObjectId": "SM05004418",
+      "locationDescription": "Goethe-Institut Pakistan <br/>4 Khayaban-e-Johar, H 9/4 H-9, Islamabad, 44000",
+      "buttonDisabled": "disabled",
+      "buttonLink": "",
+      "buttonColor": "btnHellGrauV3",
+      "priceformaterDebug": {
+        "DATA": {
+          "20": {
+            "COLUMNS": [
+              "currency_ID",
+              "currency_name255_ID",
+              "currency_abbrevation255_ID",
+              "currency_icon255_ID",
+              "currency_orientation255_id",
+              "currency_separator255_id",
+              "currency_separator_decimal255_id",
+              "currency_isocode",
+              "currency_positiontext255_id",
+              "currency_name255_langtext",
+              "currency_abbrevation255_langtext",
+              "currency_icon255_langtext",
+              "currency_separator255_langtext",
+              "currency_separator_decimal255_langtext",
+              "currency_positiontext255_langtext"
+            ],
+            "DATA": []
+          }
+        },
+        "CURRENCYORIENTATION": null,
+        "CURRENCYABBREVATION": null,
+        "CURRENCYICON": "",
+        "CURRENCYNAME": "",
+        "CURRENCYSEPARATORDECIMAL": null,
+        "CURRENCYSEPARATOR": null
+      },
+      "eventTimeSpan": "11.09.\r\n - 13.09.2026",
+      "availabilityText": "Bookable from<br/>28.08.2026",
+      "bookFromStampLocalTimezone": "0",
+      "moduleTimeText": "Uhrzeiten erhalten Sie während der Buchung",
+      "modulePriceText": "",
+      "moduleText": "",
+      "modulePriceNote": false
+    },
+    {
+      "moduleId": "SM05004418",
+      "isExam": true,
+      "isModular": false,
+      "isDigital": false,
+      "isDdpActive": false,
+      "isBlended": false,
+      "isOnlyBookAllExamParts": true,
+      "ageFrom": 16,
+      "ageTo": 99,
+      "publishFrom": "25.08.2026",
+      "publishFromTime": "09:00:00.000",
+      "publishTo": "18.09.2026",
+      "publishToTime": "23:59:59.000",
+      "bookFrom": "04.09.2026",
+      "bookFromTime": "14:16:00.000",
+      "bookTo": "18.09.2026",
+      "bookToTime": "23:59:59.000",
+      "startDate": "18.09.2026",
+      "endDate": "18.09.2026",
+      "startTime": "00:00:00.000",
+      "endTime": "00:00:00.000",
+      "locationId": "F 10003364",
+      "locationName": "Lahore",
+      "category": "E004",
+      "languageLevel": "A1",
+      "targetGroupExam": "ER",
+      "targetGroupCourse": "",
+      "onlyWithAcc": false,
+      "checkForAccommodation": false,
+      "startMonth": 9,
+      "durationWeeks": 0,
+      "teachingUnitsPerWeek": 0,
+      "teachingUnitsTotal": 0,
+      "pspElement": "ASA1",
+      "price": " 30000 ",
+      "priceInternal": " 18150 ",
+      "priceRate": 30000,
+      "priceInternRate": 18150,
+      "currency": "PKR",
+      "availability": 11,
+      "capacityOptimal": 0,
+      "capacityMax": 0,
+      "isOnlineCourse": false,
+      "isIndividualCourse": false,
+      "lastUpdated": "2026-08-25T09:59:19.000",
+      "variantId": "",
+      "acadYear": "2026",
+      "acadPeriod": "020",
+      "evObId": "",
+      "institutIdFlw": "",
+      "smModuleIdFlw": "",
+      "variantIdFlw": "",
+      "evObIdFlw": "",
+      "isYouthCourse": false,
+      "isOnlineLiveCourse": false,
+      "isSingleBooking": true,
+      "isGroupBooking": false,
+      "keyAccounts": [],
+      "datesPerWeek": 0,
+      "isClass": false,
+      "instituteId": "O 10000366",
+      "estBillableWithCourse": false,
+      "estMandatory": false,
+      "estBillableMonth": 0,
+      "paymentModes": [
+        {
+          "paymentMode": "RECH",
+          "cardType": ""
+        }
+      ],
+      "publishFromStamp": "2026-08-25T04:00:00.000Z",
+      "publishToStamp": "2026-09-18T18:59:59.000Z",
+      "bookToStamp": "2026-09-18T18:59:59.000Z",
+      "supportLanguages": [],
+      "targetGroup": "ER",
+      "priceForRanges": [],
+      "airports": [],
+      "modules": [
+        {
+          "ceId": "CE05006041",
+          "type": "0014",
+          "startTime": "00:00:00.000",
+          "endTime": "00:00:00.000",
+          "minutesExamDuration": "000",
+          "minutesExamLeadTime": "000",
+          "isOdpExam": false
+        },
+        {
+          "ceId": "CE05006042",
+          "type": "0021",
+          "startTime": "00:00:00.000",
+          "endTime": "00:00:00.000",
+          "minutesExamDuration": "000",
+          "minutesExamLeadTime": "000",
+          "isOdpExam": false
+        }
+      ],
+      "modularPrices": [],
+      "clevels": [],
+      "smTexts": [
+        {
+          "textKey": "SM05004418000000009005deO 10000366",
+          "objectId": "SM05004418",
+          "eventId": "00000000",
+          "type": "9005",
+          "lang": "de",
+          "text": "Goethe-Zertifikat A1: Start Deutsch 1"
+        },
+        {
+          "textKey": "SM05004418000000009006deO 10000366",
+          "objectId": "SM05004418",
+          "eventId": "00000000",
+          "type": "9006",
+          "lang": "de",
+          "text": "<h2>Prüfungsstruktur</h2><div>Die Prüfung besteht aus folgenden Teilprüfungen:</div><div>Hören   20 Minuten</div><div>Lesen    25 Minuten</div><div>Schreiben 20 Minuten</div><div>Sprechen  15 Minuten</div><div><br/></div><h2>Zugangsvoraussetzungen</h2><div>Empfohlen ab 16 Jahre</div><div><br/></div><h2>Mindestteilnehmerzahl</h2><div>Die Mindestteilnehmerzahl beträgt 10 Personen. Es kann natürlich auch bei uns vorkommen, dass die Mindestteilnehmerzahl nicht erreicht wird und eine Prüfung deshalb nicht zu Stande kommt. In diesem Fall werden wir versuchen, Ihnen frühzeitig eine Alternative anzubieten. Möchten Sie diese nicht akzeptieren, erhalten Sie die bereits geleisteten Zahlungen umgehend zurück.</div>"
+        },
+        {
+          "textKey": "SM05004418000000009006enO 10000366",
+          "objectId": "SM05004418",
+          "eventId": "00000000",
+          "type": "9006",
+          "lang": "en",
+          "text": "<h2>Parts of the exam</h2><div>The exam consists of the following parts:</div><div>Listening 20 minutes</div><div>Reading 25 minutes</div><div>Writing 20 minutes</div><div>Speaking 15 minutes</div><div><br/></div><h2>Prerequisites for participation</h2><div>recommended from 16 years of age</div><div><br/></div><h2>Minimum number of participants</h2><div>The minimum number of participants is 10. If the minimum number of participants is not reached, the examination will not take place as a consequence. In such a case, we will do our best to offer you an alternative in good time. If you do not want to accept the suggested alternative, any payments already made will be promptly refunded.</div>"
+        }
+      ],
+      "eventTexts": [],
+      "locationTexts": [
+        {
+          "textKey": "F 10003364000000009005deO 10000366",
+          "objectId": "F 10003364",
+          "eventId": "00000000",
+          "type": "9005",
+          "lang": "de",
+          "text": "Lahore"
+        },
+        {
+          "textKey": "F 10003364000000009005enO 10000366",
+          "objectId": "F 10003364",
+          "eventId": "00000000",
+          "type": "9005",
+          "lang": "en",
+          "text": "Lahore"
+        },
+        {
+          "textKey": "F 10003364000000009008deO 10000366",
+          "objectId": "F 10003364",
+          "eventId": "00000000",
+          "type": "9008",
+          "lang": "de",
+          "text": "NUML Lahore: 2nd Floor, Aiwan-e-Iqbal Complex, Egerton Rd, Garhi Shahu, Lahore, 54000, Pakistan"
+        },
+        {
+          "textKey": "F 10003364000000009008enO 10000366",
+          "objectId": "F 10003364",
+          "eventId": "00000000",
+          "type": "9008",
+          "lang": "en",
+          "text": "NUML Lahore: 2nd Floor, Aiwan-e-Iqbal Complex, Egerton Rd, Garhi Shahu, Lahore, 54000, Pakistan"
+        }
+      ],
+      "defaultLanguage": "de",
+      "majorityAge": "18",
+      "courseDurationUnit": "0",
+      "ueConversionFactor": 0.75,
+      "languageLevelArray": [
+        "A",
+        "1"
+      ],
+      "languageLevelBase": "A1",
+      "skillLevel": null,
+      "filter_languagelevelmin": "A1",
+      "filter_languagelevelmax": "A1",
+      "eventName": "Goethe-Zertifikat A1: Start Deutsch 1",
+      "eventDescription": "<h2>Parts of the exam</h2><div>The exam consists of the following parts:</div><div>Listening 20 minutes</div><div>Reading 25 minutes</div><div>Writing 20 minutes</div><div>Speaking 15 minutes</div><div><br/></div><h2>Prerequisites for participation</h2><div>recommended from 16 years of age</div><div><br/></div><h2>Minimum number of participants</h2><div>The minimum number of participants is 10. If the minimum number of participants is not reached, the examination will not take place as a consequence. In such a case, we will do our best to offer you an alternative in good time. If you do not want to accept the suggested alternative, any payments already made will be promptly refunded.</div>",
+      "eventWeekdays": "",
+      "eventNameObjectId": "SM05004418",
+      "locationDescription": "NUML Lahore: 2nd Floor, Aiwan-e-Iqbal Complex, Egerton Rd, Garhi Shahu, Lahore, 54000, Pakistan",
+      "buttonDisabled": "disabled",
+      "buttonLink": "",
+      "buttonColor": "btnHellGrauV3",
+      "priceformaterDebug": {
+        "DATA": {
+          "20": {
+            "COLUMNS": [
+              "currency_ID",
+              "currency_name255_ID",
+              "currency_abbrevation255_ID",
+              "currency_icon255_ID",
+              "currency_orientation255_id",
+              "currency_separator255_id",
+              "currency_separator_decimal255_id",
+              "currency_isocode",
+              "currency_positiontext255_id",
+              "currency_name255_langtext",
+              "currency_abbrevation255_langtext",
+              "currency_icon255_langtext",
+              "currency_separator255_langtext",
+              "currency_separator_decimal255_langtext",
+              "currency_positiontext255_langtext"
+            ],
+            "DATA": []
+          }
+        },
+        "CURRENCYORIENTATION": null,
+        "CURRENCYABBREVATION": null,
+        "CURRENCYICON": "",
+        "CURRENCYNAME": "",
+        "CURRENCYSEPARATORDECIMAL": null,
+        "CURRENCYSEPARATOR": null
+      },
+      "eventTimeSpan": "18.09.2026",
+      "availabilityText": "Bookable from<br/>04.09.2026",
+      "bookFromStampLocalTimezone": "0",
+      "moduleTimeText": "Uhrzeiten erhalten Sie während der Buchung",
+      "modulePriceText": "",
+      "moduleText": "",
+      "modulePriceNote": false
     }
-  ]
+  ],
+  "apiparameters": [
+    {
+      "NAME": "CMSPageURL",
+      "TYPE": "url",
+      "VALUE": "https://www.goethe.de/ins/pk/en/m/spr/prf/gzsd1.cfm"
+    },
+    {
+      "NAME": "CMSApiTypeCall",
+      "TYPE": "url",
+      "VALUE": "list"
+    },
+    {
+      "NAME": "isOdpExam",
+      "TYPE": "url",
+      "VALUE": "false"
+    },
+    {
+      "NAME": "dataMode",
+      "TYPE": "url",
+      "VALUE": "0"
+    },
+    {
+      "NAME": "instituteId",
+      "TYPE": "url",
+      "VALUE": "O 10000366"
+    },
+    {
+      "NAME": "countryIsoCode",
+      "TYPE": "url",
+      "VALUE": "PK"
+    },
+    {
+      "NAME": "lang",
+      "TYPE": "url",
+      "VALUE": "en"
+    },
+    {
+      "NAME": "pspElement",
+      "TYPE": "url",
+      "VALUE": "ASA1,AFA1,AB2A,AC1A,AC2A,AA2A,AA2J,AGTP,ABUL,ATDF,ADSH,AB1A,AB1J,APBS"
+    },
+    {
+      "NAME": "sbook",
+      "TYPE": "url",
+      "VALUE": "true"
+    }
+  ],
+  "PAGINATION": {
+    "FIRST": {
+      "PAGENUM": 1,
+      "START": 1,
+      "NEXT": 2,
+      "ACTIVE": true,
+      "PREV": 1
+    },
+    "PAGELIST": [
+      {
+        "PAGENUM": 1,
+        "START": 1,
+        "NEXT": 2,
+        "ACTIVE": true,
+        "PREV": 1
+      }
+    ],
+    "COUNT": 1,
+    "LAST": {
+      "PAGENUM": 1,
+      "START": 1,
+      "NEXT": 2,
+      "ACTIVE": true,
+      "PREV": 1
+    }
+  },
+  "APIREQUESTERROR": {},
+  "START": "1",
+  "CACHETIMEOUT": 20,
+  "SUCCESS": true,
+  "RECORDCOUNT": 2,
+  "ADDITIONALROWS": 0,
+  "FROMCACHE": false,
+  "DEBUG": {
+    "DIFFERENCE": 64,
+    "CACHE": "application",
+    "NOW": "August, 26 2026 10:38:43 +0200",
+    "FROMCACHE": false,
+    "LASTCHANGE": "August, 26 2026 10:37:38 +0200"
+  },
+  "END": 2,
+  "timeLog": {
+    "STARTTIME": "August, 26 2026 10:38:43 +0200",
+    "APIREQUESTTIME": {
+      "offers": {
+        "START": "August, 26 2026 10:38:43 +0200",
+        "TIME": 0,
+        "END": "August, 26 2026 10:38:43 +0200"
+      }
+    },
+    "TIMESPAN": 0,
+    "ENDTIME": "August, 26 2026 10:38:43 +0200"
+  }
 }

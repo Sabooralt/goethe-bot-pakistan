@@ -1,13 +1,11 @@
-
-import { Browser, Page } from "playwright-core";
+import { Browser, BrowserContext, Page } from "playwright-core";
 import { Camoufox, LaunchOptions } from "camoufox-js";
 import { USE_PROXIES } from "../proxyPool";
 
 
 
 const TARGET_URL =
-  process.env.TARGET_URL ||
-  "https://www.goethe.de/ins/pk/en/spr/prf/gzsd2.cfm";
+  process.env.TARGET_URL || "https://www.goethe.de/ins/pk/en/spr/prf/gzsd1.cfm";
 
 interface ExamModule {
   date: string;
@@ -58,14 +56,13 @@ class ExamMonitor {
       ? "http://localhost:3001/api/mock-exam"
       : null;
   private browser: Browser | null = null;
+  private context: BrowserContext | null = null;
   private page: Page | null = null;
   private timeoutInterval: NodeJS.Timeout | null = null;
   private isPolling = false;
   private shouldStopPolling = false;
   private processingOid = false;
   private processedOids = new Set<string>();
-  private consecutiveErrors = 0;
-  private maxConsecutiveErrors = 5;
   private lastSuccessfulPoll: Date | null = null;
   private rapidOidHandler: ((exam: ExamData) => Promise<void>) | null = null;
   private lockedExam: LockedExam | null = null;
@@ -75,55 +72,58 @@ class ExamMonitor {
   private pollsOnCurrentIp = 0;
   private readonly MAX_POLLS_PER_IP = 2;
 
+  private buildLaunchArgs(): LaunchOptions {
+    let proxyHost: string | undefined = undefined;
+    let username: string | undefined = undefined;
+    let password: string | undefined = undefined;
+
+    if (USE_PROXIES) {
+      proxyHost = process.env.GERMANY_PROXY_HOST;
+      username = process.env.GERMANY_PROXY_USERNAME;
+      password = process.env.GERMANY_PROXY_PASSWORD;
+    }
+
+    const args: LaunchOptions = {
+      os: 'windows',
+      geoip: true,
+      locale: ['en-US', 'en-GB'],
+      block_images: true,
+      block_webrtc: true,
+      screen: {
+        minWidth: 1024,
+        maxWidth: 1920,
+        minHeight: 768,
+        maxHeight: 1080
+      },
+      headless: true,
+      fonts: ['Arial', 'Times New Roman'],
+    }
+
+    if (USE_PROXIES && proxyHost && username && password) {
+      args.proxy = {
+        server: proxyHost,
+        username: username,
+        password: password
+      }
+    }
+
+    return args;
+  }
+
   private async launchBrowser(): Promise<boolean> {
     try {
       console.log("[browser] Launching browser");
-      let proxyHost: string | undefined = undefined;
-      let username: string | undefined = undefined;
-      let password: string | undefined = undefined;
-      let rotatingUsername: string | undefined = undefined;
+      const args = this.buildLaunchArgs();
 
-      if (USE_PROXIES) {
-        proxyHost = process.env.GERMANY_PROXY_HOST;
-        username = process.env.GERMANY_PROXY_USERNAME;
-        password = process.env.GERMANY_PROXY_PASSWORD;
-      }
-
-
-
-      const args: LaunchOptions = {
-        os: 'windows',
-        geoip: true,
-        humanize: 1.5,
-        locale: ['en-US', 'en-GB'],
-        block_images: true,
-        block_webrtc: true,
-        screen: {
-          minWidth: 1024,
-          maxWidth: 1920,
-          minHeight: 768,
-          maxHeight: 1080
-        },
-        headless: true,
-        fonts: ['Arial', 'Times New Roman'],
-      }
-
-      if (USE_PROXIES && proxyHost && username && password) {
-        args.proxy = {
-          server: proxyHost,
-          username: username,
-          password: password
-        }
-      }
       console.log({
         useProxies: USE_PROXIES,
-        USE_PROXIES,
         argsProxy: args.proxy,
       });
 
       this.browser = await Camoufox(args);
       // @ts-ignore
-      this.page = await this.browser.newPage();
+      this.context = await this.browser!.newContext();
+      this.page = await this.context!.newPage();
       console.log("[browser] Browser launched");
       return true;
     } catch (error) {
@@ -132,8 +132,50 @@ class ExamMonitor {
     }
   }
 
+  /**
+   * Fast path used for IP rotation: keeps the underlying Camoufox browser
+   * process alive and just closes + reopens the context. Since the proxy
+   * is a rotating endpoint, each new context gets a fresh exit IP without
+   * paying for a full browser relaunch. The apiUrl itself is not session
+   * bound, so it is never re-captured here — we just navigate once so
+   * page.reload() has something to reload against.
+   */
+  private async reopenContext(): Promise<boolean> {
+    try {
+      if (!this.browser) {
+        console.warn("[browser] No browser instance yet — launching fresh");
+        return await this.launchBrowser();
+      }
+
+      if (this.context) {
+        await this.context.close().catch(() => { });
+        this.context = null;
+        this.page = null;
+      }
+
+      console.log("[browser] Opening new context (IP rotation)");
+      this.context = await this.browser.newContext();
+      this.page = await this.context.newPage();
+
+      await this.page.goto(TARGET_URL, {
+        waitUntil: "domcontentloaded",
+        timeout: 20000,
+      });
+
+      console.log("[browser] New context ready");
+      return true;
+    } catch (error) {
+      console.error("[browser] Failed to reopen context:", error);
+      return false;
+    }
+  }
+
   private async closeBrowser(): Promise<void> {
     try {
+      if (this.context) {
+        await this.context.close().catch(() => { });
+        this.context = null;
+      }
       if (this.browser) {
         await this.browser.close();
         this.browser = null;
@@ -159,7 +201,7 @@ class ExamMonitor {
       console.log(`[captureApiUrl] Attempt ${attempt}/${maxRetries}`);
 
       try {
-        if (!this.browser || !this.page) {
+        if (!this.browser || !this.page || !this.context) {
           const launched = await this.launchBrowser();
           if (!launched) continue;
         }
@@ -202,7 +244,6 @@ class ExamMonitor {
         if (apiUrl) {
           console.log(`[captureApiUrl] Success on attempt ${attempt}`);
           this.apiUrl = apiUrl;
-          this.consecutiveErrors = 0;
           return apiUrl;
         }
       } catch (error) {
@@ -227,11 +268,9 @@ class ExamMonitor {
         const res = await fetch(this.apiUrl);
         if (!res.ok) return null;
         const data = await res.json();
-        this.consecutiveErrors = 0;
         this.lastSuccessfulPoll = new Date();
         return data;
       } catch (error) {
-        this.consecutiveErrors++;
         console.error("[api] Direct fetch error:", error);
         return null;
       }
@@ -250,10 +289,7 @@ class ExamMonitor {
         this.page!.off("response", handler);
         this.lastApiCallDuration = Date.now() - startTime;
         if (data) {
-          this.consecutiveErrors = 0;
           this.lastSuccessfulPoll = new Date();
-        } else {
-          this.consecutiveErrors++;
         }
         resolve(data);
       };
@@ -263,13 +299,8 @@ class ExamMonitor {
         if (url.includes("examfinder")) {
           const status = response.status();
           console.log(`[api] Intercepted examfinder — status: ${status}`);
-          if (status === 403) {
-            console.warn("[api] 403 detected — flagging for IP rotation");
-            this.consecutiveErrors = this.maxConsecutiveErrors; // force rotation on next cycle
-            done(null);
-            return;
-          }
           if (status !== 200) {
+            console.warn(`[api] Non-200 status (${status}) — will rotate instantly`);
             done(null);
             return;
           }
@@ -287,7 +318,7 @@ class ExamMonitor {
       setTimeout(() => {
         console.warn("[api] Intercept timeout — examfinder never fired");
         done(null);
-      }, 15000);
+      }, 7000);
 
       try {
         await this.page!.reload({
@@ -298,16 +329,6 @@ class ExamMonitor {
         // timeout ok — examfinder fires before domcontentloaded
       }
     });
-  }
-
-  private async checkAndRecaptureApiUrl(rotateIp: () => Promise<boolean>): Promise<boolean> {
-    if (this.consecutiveErrors >= this.maxConsecutiveErrors) {
-      console.warn(`[poll] ${this.consecutiveErrors} consecutive errors — rotating IP`);
-      const rotated = await rotateIp();
-      if (!rotated) return false;
-      return true;
-    }
-    return true;
   }
 
   private prioritizeExams(
@@ -344,14 +365,13 @@ class ExamMonitor {
       onTimeout,
       stopOnFirstOid = true,
       maxDurationMs = 30 * 60 * 1000,
-      priorityLocations = ["karachi", "lahore", "islamabad"],
+      priorityLocations = ["islamabad"],
     } = options;
 
     this.rapidOidHandler = onExamWithOid || null;
     this.shouldStopPolling = false;
     this.processingOid = false;
     this.processedOids.clear();
-    this.consecutiveErrors = 0;
     this.lockedExam = null;
     this.pollCount = 0;
     this.pollsOnCurrentIp = 0; // reset
@@ -372,11 +392,6 @@ class ExamMonitor {
     const targetDatePKT = new Date(targetDate.getTime() + PKT_OFFSET_MS);
     const [year, month, day] = targetDatePKT.toISOString().split("T")[0].split("-");
     const targetBookFromDate = `${day}.${month}.${year}`;
-    /* 
-        console.log(`[startPolling] Target (UTC): ${targetDate.toISOString()}`);
-        console.log(`[startPolling] Target (PKT): ${targetDatePKT.toISOString()}`);
-        console.log(`[startPolling] bookFrom date: ${targetBookFromDate}`); */
-
 
     this.isPolling = true;
 
@@ -387,25 +402,19 @@ class ExamMonitor {
       this.stopPolling();
     }, maxDurationMs);
 
+    // Instant IP rotation: closes + reopens only the context (browser stays
+    // alive). apiUrl is not session bound, so it is reused as-is — no
+    // re-capture. Each new context gets a fresh exit IP from the rotating
+    // proxy endpoint.
     const rotateIp = async (): Promise<boolean> => {
       console.log(`[poll] Rotating IP after ${this.pollsOnCurrentIp} polls`);
-      await this.closeBrowser();
-      this.apiUrl = null;
-
-      try {
-        const { execSync } = await import("child_process");
-        execSync("rm -rf ./profile_*");
-        console.log("[poll] Cleaned up old profiles");
-      } catch { }
-
-      const newUrl = await this.captureApiUrl(5, 3000);
-      if (!newUrl) {
+      const reopened = await this.reopenContext();
+      if (!reopened) {
         console.error("[poll] Failed to rotate IP");
         return false;
       }
 
       this.pollsOnCurrentIp = 0;
-      this.consecutiveErrors = 0;
       console.log("[poll] ✅ IP rotated successfully");
       return true;
     };
@@ -421,21 +430,24 @@ class ExamMonitor {
         return;
       }
 
-
-
-      const canContinue = await this.checkAndRecaptureApiUrl(rotateIp);
-      if (!canContinue) {
-        this.stopPolling();
-        if (onTimeout) await onTimeout();
-        return;
-      }
-
       try {
         this.pollCount++;
         this.pollsOnCurrentIp++;
 
         const data = await this.browserApiCall();
         console.log(`[poll] Raw data:`, JSON.stringify(data)?.substring(0, 200));
+
+        if (!data) {
+          console.warn("[poll] Null response (non-200 / timeout) — rotating instantly");
+          const rotated = await rotateIp();
+          if (!rotated) {
+            this.stopPolling();
+            if (onTimeout) await onTimeout();
+            return;
+          }
+          setImmediate(() => setTimeout(rapidPoll, interval));
+          return;
+        }
 
         if (!data?.DATA || !Array.isArray(data.DATA)) {
           if (this.pollCount % 10 === 0) {
@@ -488,12 +500,10 @@ class ExamMonitor {
             this.lockedExam = null;
           }
         } else {
-          const matchingExams = data.DATA.filter(
-            (exam: ExamData) => exam.bookFrom === targetBookFromDate
-          );
+          const matchingExams = data.DATA
 
           if (matchingExams.length > 0) {
-            const exam = this.prioritizeExams(matchingExams, priorityLocations)[0];
+            const exam = matchingExams[0];
 
             this.lockedExam = {
               locationName: exam.locationName || "",
@@ -548,7 +558,6 @@ class ExamMonitor {
         }
       } catch (error) {
         console.error("[poll] Error:", error);
-        this.consecutiveErrors++;
       }
 
       setImmediate(() => setTimeout(rapidPoll, interval));
@@ -603,7 +612,6 @@ class ExamMonitor {
       apiUrl: this.apiUrl,
       processingOid: this.processingOid,
       processedOids: Array.from(this.processedOids),
-      consecutiveErrors: this.consecutiveErrors,
       lastSuccessfulPoll: this.lastSuccessfulPoll,
       lockedExam: this.lockedExam,
       pollCount: this.pollCount,
@@ -620,7 +628,6 @@ class ExamMonitor {
     this.apiUrl = null;
     this.processedOids.clear();
     this.processingOid = false;
-    this.consecutiveErrors = 0;
     this.lockedExam = null;
     this.pollCount = 0;
     this.pollsOnCurrentIp = 0;

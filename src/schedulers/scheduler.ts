@@ -220,8 +220,7 @@ class ExamScheduler {
       // Step 2: Start polling for OID
       console.log(`[examMonitor] Starting OID polling for ${schedule.name}...`);
 
-      await examMonitor.startPolling(process.env.TEST_MODE === "true" ?
-        new Date("2026-07-07T10:00:00.000Z") : schedule.runAt
+      await examMonitor.startPolling(schedule.runAt
         , {
           maxDurationMs: 5 * 60 * 60 * 1000,
 
