@@ -1,30 +1,48 @@
-import { Page } from "puppeteer";
+import { Page } from "playwright-core";
 
-export const handleBookingConflict = async (page: Page) => {
-  const overlaySelector = ".cs-overlay__container";
-  const discardOtherButtonSelector =
-    "button.cs-button.cs-button--look_tertiary.cs-layer__button";
-
+export const handleBookingConflict = async (
+  page: Page
+): Promise<boolean> => {
   try {
-    const overlay = await page.$(overlaySelector);
+    const overlay = page
+      .locator(".cs-overlay__container")
+      .filter({
+        hasText: "Another booking session you initiated is still active.",
+      });
 
-    if (overlay) {
-      console.log("⚠️ Booking conflict detected, discarding other booking...");
-
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: "networkidle2", timeout: 15000 }),
-        page.click(discardOtherButtonSelector),
-      ]);
-
-      console.log("Navigated after discarding other booking");
-
-      return true;
+    if (await overlay.count() === 0) {
+      return false;
     }
+
+    if (!(await overlay.isVisible())) {
+      return false;
+    }
+
+    console.log(
+      "⚠️ Booking conflict detected, discarding other booking..."
+    );
+
+    const discardOtherButton = overlay.getByRole("button", {
+      name: "Discard other booking",
+      exact: true,
+    });
+
+    await discardOtherButton.click();
+
+    await overlay.waitFor({
+      state: "hidden",
+      timeout: 15000,
+    });
+
+    console.log("✅ Other booking discarded");
+
+    return true;
   } catch (error: any) {
-    console.error("Error handling booking conflict:", error.message);
+    console.error(
+      "❌ Error handling booking conflict:",
+      error?.message || error
+    );
 
     return false;
   }
-
-  return false; // no conflict detected
 };

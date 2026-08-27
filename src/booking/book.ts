@@ -9,6 +9,8 @@ import { getModuleStatus, ModuleKey } from "../fillers/getModuleStatus";
 import { accountPool } from "../accounts/account-pool";
 import { notifyBookingCompleted } from "../fillers/notifyBookingComplete";
 import { CookieConsentBypass } from "../browser/cookieConsentBypass";
+import { selectModules } from "../fillers/selectModules";
+import { handleBookingConflict } from "../fillers/handleBookingConflict";
 
 dotenv.config();
 
@@ -246,6 +248,9 @@ const runAutomatedFlow = async (
         return;
       }
     }
+
+    await selectModules(page, account.modules);
+
     sendLog(bot, chatId, identifier, `✅ Modules selected — continuing\n🖥️ Display: ${displayInfo.display}\n🔗 noVNC: ${displayInfo.noVncUrl}\n🔌 VNC Port: ${displayInfo.vncPort}\n`);
 
     await page.locator("button.cs-button--arrow_next").nth(1).click();
@@ -272,12 +277,28 @@ const runAutomatedFlow = async (
       return;
     }
 
+    const bookingConflict = await handleBookingConflict(page);
+
+    if (bookingConflict) {
+      //DOB Page
+      await page.locator("button.cs-button--arrow_next").nth(0).click();
+      await page.waitForLoadState("domcontentloaded");
+
+      //Additional Info Page
+      await page.locator("button.cs-button--arrow_next").nth(0).click();
+      await page.waitForLoadState("domcontentloaded");
+    }
+
+    //Voucher Page
     await page.locator("button.cs-button--arrow_next").nth(2).click();
     await page.waitForLoadState("domcontentloaded");
 
+
+    //Payment confirm Page
     await page.locator("button.cs-button--arrow_next").nth(1).click();
     await page.waitForLoadState("domcontentloaded");
 
+    //Final Confirmation Page
     await page.locator("button.cs-button--arrow_next").nth(0).click();
     await page.waitForLoadState("domcontentloaded");
 

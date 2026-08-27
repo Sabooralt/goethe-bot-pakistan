@@ -2,25 +2,35 @@ import dotenv from "dotenv";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
 import { Camoufox, LaunchOptions } from "camoufox-js";
 import { getProxyIp } from "./getIp";
+import { getModuleStatus, ModuleKey } from "../fillers/getModuleStatus";
+import { CookieConsentBypass } from "../browser/cookieConsentBypass";
+import { selectModules } from "../fillers/selectModules";
 
 dotenv.config();
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const testProxyRotation = async (browserNumber: number = 2) => {
-  const proxyHost = "p.webshare.io:80";
-  const username = "gzeckesj-rotate";
-  const password = "ooi25in29758";
+const startBooking = async (browserNumber: number = 2) => {
+  const proxyHost = process.env.GERMANY_PROXY_HOST!;
+  const username = process.env.GERMANY_PROXY_USERNAME;
+  const password = process.env.GERMANY_PROXY_PASSWORD;
 
-  let proxy: any = null;
-  let proxyUrl = "";
-  if (USE_PROXIES) {
-    proxy = proxyPool.getNextProxy();
-    if (proxy) {
-      proxyUrl = `${proxy.host}:${proxy.port}`;
-      console.log(`[proxy] Proxy ${proxyUrl} → Browser ${browserNumber}`);
+  const MOCK_ACCOUNT = {
+    email: "abdulsaboormillwala123@gmail.com",
+    password: "Consolidation@340",
+    modules: {
+      hear: false,
+      speak: false,
+      write: true,
+      read: false,
     }
   }
+
+
+
+  const oid = process.env.TEST_OID;
+
+  const bookingUrl = `https://goethe.de/coe/entry?oid=${oid}`;
 
   const args: LaunchOptions = {
     os: "windows",
@@ -50,94 +60,35 @@ const testProxyRotation = async (browserNumber: number = 2) => {
 
   const browser = await Camoufox(args);
 
-  console.log("\n=== TEST 1: Same context, repeated requests ===");
-  console.log("Purpose: baseline — confirm IP is stable within a single context.\n");
+  console.log("Browser opened!");
+
 
   const context1 = await browser.newContext({
     extraHTTPHeaders: { Connection: "close" },
   });
-  const page1 = await context1.newPage();
+  const page = await context1.newPage();
 
-  const ipsWithinContext1: string[] = [];
-  for (let i = 0; i <= 2; i++) {
-    const ip = await getProxyIp(page1);
-    console.log(`[Context 1 | Request ${i}] IP: ${ip}`);
-    ipsWithinContext1.push(ip);
-    await delay(1000);
+  await CookieConsentBypass(page, true)
+  await page.goto(bookingUrl);
+
+  console.log("Url Reached!");
+  const availableModules = await getModuleStatus(page);
+
+  console.log(availableModules);
+
+  const allRequiredAvailable = Object.entries(MOCK_ACCOUNT.modules).every(
+    ([key, required]) => !required || availableModules[key as ModuleKey]
+  );
+
+  if (!allRequiredAvailable) {
+    console.log("Required modules not available!")
+    await delay(7200000);
+    return;
   }
 
-  await context1.close();
-  console.log("[Context 1] Closed.\n");
+  await selectModules(page, MOCK_ACCOUNT.modules);
 
-  console.log("=== TEST 2: New context, no proxy override ===");
-  console.log("Purpose: does closing + reopening a context alone rotate the IP?\n");
+  console.log("Modules selected!");
+}
 
-  const context2 = await browser.newContext({
-    extraHTTPHeaders: { Connection: "close" },
-  });
-  const page2 = await context2.newPage();
-
-  const ip2 = await getProxyIp(page2);
-  console.log(`[Context 2 | after reopen, no proxy override] IP: ${ip2}`);
-
-  await context2.close();
-  console.log("[Context 2] Closed.\n");
-
-  console.log("=== TEST 3: New context, explicit proxy override ===");
-  console.log("Purpose: does Camoufox/Playwright even accept a context-level");
-  console.log("proxy override that differs from the launch-level one?\n");
-
-  let context3;
-  let proxyOverrideAccepted = true;
-  try {
-    context3 = await browser.newContext({
-      extraHTTPHeaders: { Connection: "close" },
-      proxy: {
-        server: proxyHost,
-        username: `${username}-sess${Date.now()}`, // force new session if provider supports it
-        password: password,
-      },
-    });
-  } catch (err) {
-    proxyOverrideAccepted = false;
-    console.log(`[Context 3] newContext() with proxy override threw: ${(err as Error).message}`);
-    context3 = await browser.newContext({
-      extraHTTPHeaders: { Connection: "close" },
-    });
-  }
-
-  const page3 = await context3.newPage();
-  const ip3 = await getProxyIp(page3);
-  console.log(`[Context 3 | explicit proxy override, new session id] IP: ${ip3}`);
-
-  await context3.close();
-  console.log("[Context 3] Closed.\n");
-
-  console.log("=== RESULTS ===");
-  console.log(`Context 1 IPs (should be identical to each other): ${ipsWithinContext1.join(", ")}`);
-  console.log(`Context 1 → Context 2 (no override) changed?      ${ipsWithinContext1[0] !== ip2}`);
-  console.log(`Context 1 → Context 3 (explicit override) changed? ${ipsWithinContext1[0] !== ip3}`);
-  console.log(`Context-level proxy override accepted without error: ${proxyOverrideAccepted}`);
-
-  const withinContextStable = new Set(ipsWithinContext1).size === 1;
-  console.log(`\nIP stable within a single context: ${withinContextStable}`);
-
-  if (!withinContextStable) {
-    console.log("⚠️ IP changed even within the SAME context — your proxy endpoint");
-    console.log("   rotates per-request regardless of context/session, which changes");
-    console.log("   the whole strategy (you don't need context recreation to rotate at all).");
-  } else if (ipsWithinContext1[0] !== ip2) {
-    console.log("✅ Closing/reopening context (no proxy override) DOES rotate the IP.");
-    console.log("   Your existing recreateContext() approach is sufficient — no need");
-    console.log("   to touch context-level proxy config.");
-  } else {
-    console.log("❌ Closing/reopening context alone did NOT rotate the IP.");
-    console.log("   Your proxy is sticky at the connection/session level tied to the");
-    console.log("   browser process. You'll need explicit per-context proxy override");
-    console.log(`   (worked: ${proxyOverrideAccepted}) or a full browser relaunch to rotate.`);
-  }
-
-  await browser.close();
-};
-
-testProxyRotation(2);
+startBooking();

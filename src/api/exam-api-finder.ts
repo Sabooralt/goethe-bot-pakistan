@@ -5,7 +5,9 @@ import { USE_PROXIES } from "../proxyPool";
 
 
 const TARGET_URL =
-  process.env.TARGET_URL || "https://www.goethe.de/ins/pk/en/spr/prf/gzsd1.cfm";
+  process.env.TARGET_URL!;
+
+const MOCK_API_URL = "http://localhost:3001/api/mock-exam";
 
 interface ExamModule {
   date: string;
@@ -39,7 +41,6 @@ interface PollingOptions {
   onTimeout?: () => void;
   stopOnFirstOid?: boolean;
   maxDurationMs?: number;
-  priorityLocations?: string[];
 }
 
 interface LockedExam {
@@ -51,10 +52,6 @@ interface LockedExam {
 }
 
 class ExamMonitor {
-  private apiUrl: string | null =
-    process.env.TEST_MODE === "true"
-      ? "http://localhost:3001/api/mock-exam"
-      : null;
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
@@ -110,6 +107,12 @@ class ExamMonitor {
     return args;
   }
 
+  /**
+   * Launches the browser and navigates to TARGET_URL once. No API URL is
+   * captured — browserApiCall() intercepts the "examfinder" response
+   * generically by substring match, triggered via page.reload(), so the
+   * literal URL string was never actually needed.
+   */
   private async launchBrowser(): Promise<boolean> {
     try {
       console.log("[browser] Launching browser");
@@ -124,7 +127,13 @@ class ExamMonitor {
       // @ts-ignore
       this.context = await this.browser!.newContext();
       this.page = await this.context!.newPage();
-      console.log("[browser] Browser launched");
+
+      await this.page.goto(TARGET_URL, {
+        waitUntil: "domcontentloaded",
+        timeout: 20000,
+      });
+
+      console.log("[browser] Browser launched and ready");
       return true;
     } catch (error) {
       console.error("[browser] Failed to launch browser:", error);
@@ -136,9 +145,7 @@ class ExamMonitor {
    * Fast path used for IP rotation: keeps the underlying Camoufox browser
    * process alive and just closes + reopens the context. Since the proxy
    * is a rotating endpoint, each new context gets a fresh exit IP without
-   * paying for a full browser relaunch. The apiUrl itself is not session
-   * bound, so it is never re-captured here — we just navigate once so
-   * page.reload() has something to reload against.
+   * paying for a full browser relaunch.
    */
   private async reopenContext(): Promise<boolean> {
     try {
@@ -187,85 +194,10 @@ class ExamMonitor {
     }
   }
 
-  async captureApiUrl(
-    maxRetries = 30,
-    retryDelay = 5000
-  ): Promise<string | null> {
-
-    if (process.env.TEST_MODE === "true") {
-      this.apiUrl = "http://localhost:3001/api/mock-exam";
-      console.log("[captureApiUrl] Test mode - using mock URL directly");
-      return this.apiUrl;
-    }
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      console.log(`[captureApiUrl] Attempt ${attempt}/${maxRetries}`);
-
-      try {
-        if (!this.browser || !this.page || !this.context) {
-          const launched = await this.launchBrowser();
-          if (!launched) continue;
-        }
-
-        const page = this.page!;
-
-        const apiUrl = await new Promise<string | null>(async (resolve) => {
-          let captured = false;
-
-          const timeoutId = setTimeout(() => {
-            if (!captured) resolve(null);
-          }, 25000);
-
-          page.on("response", (response: any) => {
-            const url = response.url();
-            if (!captured && url.includes("examfinder")) {
-              captured = true;
-              clearTimeout(timeoutId);
-              console.log("[captureApiUrl] API URL captured:", url);
-              resolve(url);
-            }
-          });
-
-          try {
-            await page.goto(TARGET_URL, {
-              waitUntil: "domcontentloaded",
-              timeout: 20000,
-            });
-          } catch (error) {
-            console.log("[captureApiUrl] Navigation timeout, checking if URL was captured");
-          }
-
-          await new Promise((r) => setTimeout(r, 3000));
-          if (!captured) {
-            clearTimeout(timeoutId);
-            resolve(null);
-          }
-        });
-
-        if (apiUrl) {
-          console.log(`[captureApiUrl] Success on attempt ${attempt}`);
-          this.apiUrl = apiUrl;
-          return apiUrl;
-        }
-      } catch (error) {
-        console.error(`[captureApiUrl] Error on attempt ${attempt}:`, error);
-        await this.closeBrowser();
-      }
-
-      if (attempt < maxRetries) {
-        const waitTime = Math.min(retryDelay * Math.sqrt(attempt), 15000);
-        console.log(`[captureApiUrl] Retrying in ${waitTime}ms`);
-        await new Promise((r) => setTimeout(r, waitTime));
-      }
-    }
-
-    console.error(`[captureApiUrl] Failed after ${maxRetries} attempts`);
-    return null;
-  }
-
   private async browserApiCall(): Promise<ApiResponse | null> {
-    if (process.env.TEST_MODE === "true" && this.apiUrl?.includes("localhost")) {
+    if (process.env.TEST_MODE === "true") {
       try {
-        const res = await fetch(this.apiUrl);
+        const res = await fetch(MOCK_API_URL);
         if (!res.ok) return null;
         const data = await res.json();
         this.lastSuccessfulPoll = new Date();
@@ -318,7 +250,7 @@ class ExamMonitor {
       setTimeout(() => {
         console.warn("[api] Intercept timeout — examfinder never fired");
         done(null);
-      }, 7000);
+      }, 3000);
 
       try {
         await this.page!.reload({
@@ -331,32 +263,6 @@ class ExamMonitor {
     });
   }
 
-  private prioritizeExams(
-    exams: ExamData[],
-    priorityLocations: string[]
-  ): ExamData[] {
-    if (!priorityLocations || priorityLocations.length === 0) return exams;
-
-    return exams.sort((a, b) => {
-      const aLocation = a.locationName?.toLowerCase() || "";
-      const bLocation = b.locationName?.toLowerCase() || "";
-
-      let aPriority = -1;
-      let bPriority = -1;
-
-      priorityLocations.forEach((location, index) => {
-        const lower = location.toLowerCase();
-        if (aLocation.includes(lower) && aPriority === -1) aPriority = index;
-        if (bLocation.includes(lower) && bPriority === -1) bPriority = index;
-      });
-
-      if (aPriority !== -1 && bPriority !== -1) return aPriority - bPriority;
-      if (aPriority !== -1) return -1;
-      if (bPriority !== -1) return 1;
-      return 0;
-    });
-  }
-
   async startPolling(targetDate: Date, options: PollingOptions = {}) {
     const {
       interval = 1000,
@@ -365,7 +271,6 @@ class ExamMonitor {
       onTimeout,
       stopOnFirstOid = true,
       maxDurationMs = 30 * 60 * 1000,
-      priorityLocations = ["islamabad"],
     } = options;
 
     this.rapidOidHandler = onExamWithOid || null;
@@ -377,12 +282,12 @@ class ExamMonitor {
     this.pollsOnCurrentIp = 0; // reset
     this.startTime = new Date();
 
-    if (!this.apiUrl) {
-      console.log("[startPolling] Capturing API URL");
-      await this.captureApiUrl();
+    if (process.env.TEST_MODE !== "true" && !this.page) {
+      console.log("[startPolling] Launching browser");
+      const launched = await this.launchBrowser();
 
-      if (!this.apiUrl) {
-        console.error("[startPolling] Could not capture API URL");
+      if (!launched) {
+        console.error("[startPolling] Could not launch browser");
         if (onTimeout) await onTimeout();
         return;
       }
@@ -403,8 +308,7 @@ class ExamMonitor {
     }, maxDurationMs);
 
     // Instant IP rotation: closes + reopens only the context (browser stays
-    // alive). apiUrl is not session bound, so it is reused as-is — no
-    // re-capture. Each new context gets a fresh exit IP from the rotating
+    // alive). Each new context gets a fresh exit IP from the rotating
     // proxy endpoint.
     const rotateIp = async (): Promise<boolean> => {
       console.log(`[poll] Rotating IP after ${this.pollsOnCurrentIp} polls`);
@@ -598,18 +502,12 @@ class ExamMonitor {
     await this.closeBrowser();
   }
 
-  getApiUrl(): string | null {
-    return this.apiUrl;
-  }
-
   getStatus(): any {
     const elapsed = this.startTime ? Date.now() - this.startTime.getTime() : 0;
     const rate = elapsed > 0 ? Math.round(this.pollCount / (elapsed / 1000)) : 0;
 
     return {
       isPolling: this.isPolling,
-      hasApiUrl: !!this.apiUrl,
-      apiUrl: this.apiUrl,
       processingOid: this.processingOid,
       processedOids: Array.from(this.processedOids),
       lastSuccessfulPoll: this.lastSuccessfulPoll,
@@ -625,7 +523,6 @@ class ExamMonitor {
   async destroy() {
     await this.forceStopPolling();
     await this.closeBrowser();
-    this.apiUrl = null;
     this.processedOids.clear();
     this.processingOid = false;
     this.lockedExam = null;
