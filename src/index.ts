@@ -410,6 +410,34 @@ export const bot = new TelegramBot(token, { polling: true });
     const test_mode = process.env.TEST_MODE === "true" ? "True" : "False";
     await bot.sendMessage(chatId, test_mode);
   });
+  bot.onText(/\/env_details/, async (msg) => {
+    const chatId = msg.chat.id;
+
+    const envDetails = `
+<b>⚙️ Environment Details</b>
+
+<b>TARGET_URL:</b> <code>${process.env.TARGET_URL || ""}</code>
+<b>BROWSER_COUNT:</b> <code>${process.env.BROWSER_COUNT || ""}</code>
+<b>EXAM:</b> <code>${process.env.EXAM || ""}</code>
+<b>TEST_MODE:</b> <code>${process.env.TEST_MODE || ""}</code>
+<b>USE_PROXIES:</b> <code>${process.env.USE_PROXIES || ""}</code>
+<b>UNPROXIED_BROWSER_NUMBERS:</b> <code>${process.env.UNPROXIED_BROWSER_NUMBERS || ""}</code>
+
+<b>ROTATING PROXY</b>
+<b>HOST:</b> <code>${process.env.ROTATING_PROXY_1_HOST || ""}</code>
+<b>PORT:</b> <code>${process.env.ROTATING_PROXY_1_PORT || ""}</code>
+<b>USERNAME:</b> <code>${process.env.ROTATING_PROXY_1_USERNAME || ""}</code>
+<b>TYPE:</b> <code>${process.env.ROTATING_PROXY_1_TYPE || ""}</code>
+
+<b>GERMANY PROXY</b>
+<b>HOST:</b> <code>${process.env.GERMANY_PROXY_HOST || ""}</code>
+<b>USERNAME:</b> <code>${process.env.GERMANY_PROXY_USERNAME || ""}</code>
+`;
+
+    await bot.sendMessage(chatId, envDetails, {
+      parse_mode: "HTML",
+    });
+  });
 
   bot.onText(/\/killall/, async (msg) => {
     const chatId = msg.chat.id.toString();
