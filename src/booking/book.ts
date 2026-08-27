@@ -296,11 +296,14 @@ const runAutomatedFlow = async (
 
     //Payment confirm Page
     await page.locator("button.cs-button--arrow_next").nth(1).click();
-    await page.waitForLoadState("domcontentloaded");
+    await page.waitForLoadState("networkidle");
+
+
+   
 
     //Final Confirmation Page
     await page.locator("button.cs-button--arrow_next").nth(0).click();
-    await page.waitForLoadState("domcontentloaded");
+    await page.waitForLoadState("networkidle");
 
     console.log(`[${identifier}] ✅ Booking Completed`);
 
