@@ -11,6 +11,7 @@ import { notifyBookingCompleted } from "../fillers/notifyBookingComplete";
 import { CookieConsentBypass } from "../browser/cookieConsentBypass";
 import { selectModules } from "../fillers/selectModules";
 import { handleBookingConflict } from "../fillers/handleBookingConflict";
+import { getProxyIp } from "../tests/getProxyIp";
 
 dotenv.config();
 
@@ -124,13 +125,20 @@ const navigateWithTimeout = async (
 const recreateContext = async (
   context: BrowserContext,
   browser: Browser,
-  identifier: string
+  auth: string | null,
+  identifier: string,
 ): Promise<{ context: BrowserContext; page: Page }> => {
   await context.close();
 
-  const newContext = await browser.newContext();
+  const newContext = await browser.newContext({
+
+    extraHTTPHeaders: {
+      "Proxy-Authorization": `Basic ${auth}`,
+    },
+  });
 
   const newPage = await newContext.newPage();
+
   await CookieConsentBypass(newPage, true);
   return { context: newContext, page: newPage };
 };
@@ -138,6 +146,7 @@ const recreateContext = async (
 const navigateUntilLoaded = async (
   context: BrowserContext,
   browser: Browser,
+  auth: string | null,
   page: Page,
   identifier: string,
   bookingUrl: string,
@@ -156,7 +165,7 @@ const navigateUntilLoaded = async (
   if (alreadyRateLimited) {
     totalRateLimits++;
     sendLog(bot, chatId, identifier, `🚫 Rate limited on initial load — rotating proxy and retrying`);
-    ({ context, page } = await recreateContext(context, browser, identifier));
+    ({ context, page } = await recreateContext(context, browser, auth, identifier));
   } else if (alreadyLoaded) {
     console.log(`[${identifier}] ✅ Options page already loaded on first check`);
     return { success: true, context, page };
@@ -185,7 +194,7 @@ const navigateUntilLoaded = async (
       if (navResult.rateLimited) {
         totalRateLimits++;
 
-        ({ context, page } = await recreateContext(context, browser, identifier));
+        ({ context, page } = await recreateContext(context, browser, auth, identifier));
 
         if (canSendRateLimitPing()) {
           sendLog(bot, chatId, identifier, `🚫 Rate limits ongoing across browsers (${globalRateLimitCount} total hits so far) — proxies rotating, still trying`);
@@ -299,7 +308,7 @@ const runAutomatedFlow = async (
     await page.waitForLoadState("networkidle");
 
 
-   
+
 
     //Final Confirmation Page
     await page.locator("button.cs-button--arrow_next").nth(0).click();
@@ -354,12 +363,14 @@ const startBooking = async (
   bot: TelegramBot,
   displayInfo: DisplayInfo,
   chatId: string | null,
-  timeoutMs = 5 * 60 * 60 * 1000
-) => {
+  auth: string | null = null) => {
+  const timeoutMs = 5 * 60 * 60 * 1000;
   const identifier = `Browser ${displayInfo.displayNumber}`;
-  const bookingUrl = `https://www.goethe.de/coe/entry?lang=en&oid=${oid}`;
+  const bookingUrl = `https://www.goethe.de/coe/?lang=en&oid=${oid}`;
 
   console.log(`[${identifier}] 🔍 Title: "${await page.title()}" | URL: ${page.url()}`);
+
+  
 
   try {
     await page.waitForFunction(
@@ -369,11 +380,11 @@ const startBooking = async (
     console.log(`[${identifier}] ✅ Page body loaded within timeout`)
   } catch {
     console.warn(`[${identifier}] ⚠️ Page body still empty after 10s, relaunching the browser...`);
-    ({ context, page } = await recreateContext(context, browser, identifier));
+    ({ context, page } = await recreateContext(context, browser, auth, identifier));
   }
 
 
-  const result = await navigateUntilLoaded(context, browser, page, identifier, bookingUrl, bot, chatId, timeoutMs);
+  const result = await navigateUntilLoaded(context, browser, auth, page, identifier, bookingUrl, bot, chatId, timeoutMs);
   context = result.context;
   page = result.page;
 

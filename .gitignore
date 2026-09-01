@@ -1,7 +1,8 @@
 # Dependency directories
 ./node_modules/
 node_modules/
-
+./screenshots
+screenshots/
 # Environment variables
 .env
 profile*

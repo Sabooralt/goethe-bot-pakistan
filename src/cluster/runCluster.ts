@@ -89,7 +89,7 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
   timeNow("Initialized accounts");
   console.log(`[cluster] Redirecting ${prewarmedBrowsers.length} browsers in parallel...`);
 
-  const bookingUrl = `https://www.goethe.de/coe/entry?lang=en&oid=${oid}`;
+  const bookingUrl = `https://www.goethe.de/coe/?lang=en&oid=${oid}`;
 
   console.log(
     `[cluster] Redirecting ${prewarmedBrowsers.length} browsers in parallel...`
@@ -169,6 +169,7 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
         bot,
         displayInfo,
         chatId,
+        browser.auth,
       );
     });
 

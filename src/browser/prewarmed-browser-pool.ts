@@ -3,6 +3,7 @@ import { proxyPool, USE_PROXIES } from "../proxyPool";
 import { Camoufox, LaunchOptions } from "camoufox-js";
 import { LaunchOptions as LaunchOptions2 } from "playwright-core";
 import { CookieConsentBypass } from "./cookieConsentBypass";
+import { getProxyIp } from "../tests/getProxyIp";
 
 const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
 
@@ -15,6 +16,7 @@ interface PrewarmedBrowser {
     isReady: boolean;
     createdAt: Date;
     proxyUsed?: string;
+    auth?: string | null;
 }
 
 const activeDisplays = new Set<string>();
@@ -73,9 +75,8 @@ class PrewarmedBrowserPool {
             const args: LaunchOptions = {
                 os: pickOS(),
                 geoip: true,
-                humanize: 1.5,
                 block_images: false,
-                block_webrtc: true,
+                block_webrtc: false,
                 screen: {
                     minWidth: 1024,
                     maxWidth: 1920,
@@ -85,7 +86,6 @@ class PrewarmedBrowserPool {
                 headless: false,
                 fonts: ['Arial', 'Times New Roman'],
                 env: {
-                    ...process.env,
                     DISPLAY: display,
                 }
             };
@@ -99,13 +99,12 @@ class PrewarmedBrowserPool {
 
             let proxy: any = null;
             let proxyUrl = "";
+            let auth: string | null = null;
 
-            if (UNPROXIED_BROWSER_NUMBERS.has(browserNumber)) {
-                console.log(`[proxy] Browser ${browserNumber} → intentionally unproxied (hedge browser)`);
-            } else if (USE_PROXIES) {
+            if (USE_PROXIES) {
                 proxy = proxyPool.getNextProxy();
                 if (proxy) {
-                    proxyUrl = `${proxy.host}:${proxy.port}`;
+                    proxyUrl = `${proxy.type}://${proxy.host}:${proxy.port}`;
                     console.log(`[proxy] Proxy ${proxyUrl} → Browser ${browserNumber}`);
                 }
             }
@@ -117,22 +116,36 @@ class PrewarmedBrowserPool {
                     username: proxy.username,
                     password: proxy.password
                 };
+
+                auth = Buffer.from(`${proxy.username}:${proxy.password}`).toString("base64");
+
+                console.log({
+                    browser: browserNumber,
+                    useProxies: USE_PROXIES,
+                    argsProxy: args.proxy,
+                });
             }
-            /*  const browser = await chromium.launch(args2) */
+           
             const browser = await Camoufox(args);
 
             const context = await browser.newContext({
-                extraHTTPHeaders: {
-                    'Connection': 'close'
-                }
+
             }
             );
 
             const page = await context.newPage();
             await page.setDefaultNavigationTimeout(180000);
             await page.setDefaultTimeout(20000);
+
+
+
             await CookieConsentBypass(page, true);
+            const proxyIp = await getProxyIp(page);
+
+            console.log(`[browser ${browserNumber}] Ip: ${proxyIp}`);
             console.log(`[preWarm] Pre-warmed browser ${browserNumber}`);
+
+            await page.goto("https://goethe.de", { waitUntil: "domcontentloaded" });
 
 
 
@@ -145,6 +158,7 @@ class PrewarmedBrowserPool {
                 browserNumber,
                 isReady: true,
                 createdAt: new Date(),
+                auth,
                 proxyUsed: proxyUrl,
             };
         } catch (error) {

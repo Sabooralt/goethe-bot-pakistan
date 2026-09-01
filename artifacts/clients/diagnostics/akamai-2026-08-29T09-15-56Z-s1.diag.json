@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "kind": "wre-diagnostics",
+  "generated_at": "2026-08-29T09:15:56.882227369+00:00",
+  "reason": "solve failed",
+  "host": {
+    "protocol": 1,
+    "bundle": "default",
+    "binary_version": "0.1.0",
+    "toolkit_version": "0.1.0",
+    "schema_hash": "26bd761bdc493953",
+    "targets": [
+      "akamai",
+      "altcha",
+      "example",
+      "kasada"
+    ],
+    "workers": 4,
+    "pid": 392195
+  },
+  "target": "akamai",
+  "client_version": "0.1.0",
+  "session": "s1",
+  "session_ms": 125,
+  "capabilities": {
+    "needs_v8": true,
+    "needs_chrome": false,
+    "needs_network": true,
+    "stateful": true,
+    "concurrency": "per_session",
+    "warmup_ms": 0
+  },
+  "config": {
+    "page_url": "https://www.goethe.de/ins/pk/en/spr/prf/gzsd1.cfm"
+  },
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "family": "unix",
+    "opened_at": "2026-08-29T09:15:56.757174022+00:00",
+    "cpus": 4,
+    "exe": "/home/azureuser/goethe-bot/node_modules/@proofofbot/client-akamai-linux-x64/bin/wred"
+  },
+  "calls": {
+    "total": 1,
+    "failed": 1
+  },
+  "facts": {
+    "profile": "builtin-desktop-chrome",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "page_url": "https://www.goethe.de/ins/pk/en/spr/prf/gzsd1.cfm"
+  },
+  "client": {
+    "open": false,
+    "run": null
+  },
+  "failure": {
+    "kind": "resource",
+    "message": "https://www.goethe.de/ins/pk/en/spr/prf/gzsd1.cfm answered 403 before any script ran",
+    "retryable": true
+  },
+  "dropped_events": 0,
+  "events": [
+    {
+      "at_ms": 0,
+      "level": "info",
+      "kind": "session.open",
+      "message": "session opened",
+      "data": {
+        "target": "akamai"
+      }
+    },
+    {
+      "at_ms": 1,
+      "level": "info",
+      "kind": "call.start",
+      "op": "solve",
+      "id": 3,
+      "data": {
+        "type": "object",
+        "keys": []
+      }
+    },
+    {
+      "at_ms": 125,
+      "level": "error",
+      "kind": "call.failed",
+      "op": "solve",
+      "id": 3,
+      "message": "https://www.goethe.de/ins/pk/en/spr/prf/gzsd1.cfm answered 403 before any script ran",
+      "data": {
+        "kind": "resource",
+        "retryable": true,
+        "took_ms": 123,
+        "detail": null
+      }
+    }
+  ]
+}

@@ -14,8 +14,10 @@
   "type": "commonjs",
   "description": "",
   "dependencies": {
-    "axios": "^1.12.2",
-    "camoufox-js": "^0.10.2",
+    "@proofofbot/client-akamai": "^3.1.1",
+    "axios": "^1.13.5",
+    "axios-cookiejar-support": "^7.0.0",
+    "camoufox-js": "^0.12.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.0.1",
     "express": "^5.1.0",
@@ -29,7 +31,8 @@
     "puppeteer-cluster": "^0.24.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "puppeteer-real-browser": "^1.4.4"
+    "puppeteer-real-browser": "^1.4.4",
+    "tough-cookie": "^6.0.2"
   },
   "overrides": {
     "playwright-core": "1.60.0"
@@ -37,9 +40,10 @@
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/luxon": "^3.7.1",
-    "@types/node": "^24.0.10",
+    "@types/node": "^24.13.3",
     "@types/node-telegram-bot-api": "^0.64.9",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
   }
 }
