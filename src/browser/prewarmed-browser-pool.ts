@@ -1,16 +1,16 @@
-import { Browser, BrowserContext, Page, chromium } from "playwright-core";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
-import { Camoufox, LaunchOptions } from "camoufox-js";
+import { firefox, LaunchOptions , BrowserContext, Page} from "playwright";
 import { LaunchOptions as LaunchOptions2 } from "playwright-core";
 import { CookieConsentBypass } from "./cookieConsentBypass";
 import { getProxyIp } from "../tests/getProxyIp";
+import { enginePath, writeProfile } from "../helper/stealth";
 
 const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
 
 interface PrewarmedBrowser {
-    browser: Browser;
+   
     context: BrowserContext;
-    page: Page;
+    page: Page; 
     display: string;
     browserNumber: number;
     isReady: boolean;
@@ -62,33 +62,17 @@ class PrewarmedBrowserPool {
     ): Promise<PrewarmedBrowser | null> {
         try {
             console.log(`[preWarm] Pre-warming browser ${browserNumber} on ${display}...`);
-            function pickOS(): LaunchOptions["os"] {
-                const r = Math.random();
-
-                if (r < 0.7) return "windows";
-                if (r < 0.9) return "macos";
-                return "linux";
-            }
+            
 
 
 
             const args: LaunchOptions = {
-                os: pickOS(),
-                geoip: true,
-                block_images: false,
-                block_webrtc: false,
-                screen: {
-                    minWidth: 1024,
-                    maxWidth: 1920,
-                    minHeight: 768,
-                    maxHeight: 1080
-                },
-                headless: false,
-                fonts: ['Arial', 'Times New Roman'],
-                env: {
-                    DISPLAY: display,
-                }
-            };
+               headless: false,
+               executablePath: enginePath(),
+               env: {
+                 DISPLAY: `:${browserNumber}`,
+               },
+             };
 
             const UNPROXIED_BROWSER_NUMBERS = new Set(
                 (process.env.UNPROXIED_BROWSER_NUMBERS || "8,11")
@@ -125,13 +109,12 @@ class PrewarmedBrowserPool {
                     argsProxy: args.proxy,
                 });
             }
+           const seed = Math.floor(Math.random() * 1_000_000)
+            const context = await firefox.launchPersistentContext(writeProfile(seed), args);
+
            
-            const browser = await Camoufox(args);
 
-            const context = await browser.newContext({
-
-            }
-            );
+         
 
             const page = await context.newPage();
             await page.setDefaultNavigationTimeout(180000);
@@ -151,7 +134,7 @@ class PrewarmedBrowserPool {
 
 
             return {
-                browser,
+                
                 context,
                 page,
                 display,
@@ -253,7 +236,7 @@ class PrewarmedBrowserPool {
 
         if (browser) {
             try {
-                await browser.browser.close();
+                await browser.context.close();
                 this.releaseDisplay(browser.display);
                 this.browsers.delete(browserNumber);
                 console.log(`🔄 Closed browser ${browserNumber}`);

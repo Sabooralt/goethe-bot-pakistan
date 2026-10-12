@@ -1,11 +1,11 @@
-import { Browser, BrowserContext, Page } from "playwright-core";
-import { Camoufox, LaunchOptions } from "camoufox-js";
+import { Browser, BrowserContext, LaunchOptions, Page } from "playwright";
 import { USE_PROXIES } from "../proxyPool";
+import { launchStealthContext } from "../helper/stealth";
 
 
 
 const TARGET_URL =
-  process.env.TARGET_URL!;
+  process.env.TARGET_URL || "https://www.goethe.de/ins/in/en/spr/prf/gzb2.cfm";
 
 const MOCK_API_URL = "http://localhost:3001/api/mock-exam";
 
@@ -81,19 +81,7 @@ class ExamMonitor {
     }
 
     const args: LaunchOptions = {
-      os: 'windows',
-      geoip: true,
-      locale: ['en-US', 'en-GB'],
-      block_images: true,
-      block_webrtc: true,
-      screen: {
-        minWidth: 1024,
-        maxWidth: 1920,
-        minHeight: 768,
-        maxHeight: 1080
-      },
       headless: true,
-      fonts: ['Arial', 'Times New Roman'],
     }
 
     if (USE_PROXIES && proxyHost && username && password) {
@@ -123,9 +111,8 @@ class ExamMonitor {
         argsProxy: args.proxy,
       });
 
-      this.browser = await Camoufox(args);
-      // @ts-ignore
-      this.context = await this.browser!.newContext();
+      const seed = Math.floor(Math.random() * 1_000_000);
+      this.context = await launchStealthContext(seed, args);
       this.page = await this.context!.newPage();
 
       await this.page.goto(TARGET_URL, {

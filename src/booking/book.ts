@@ -1,6 +1,6 @@
 //Pak
 
-import { Browser, BrowserContext, Page } from "playwright-core";
+import { Browser, BrowserContext, Page } from "playwright";
 import dotenv from "dotenv";
 import type TelegramBot from "node-telegram-bot-api";
 import { AccountDocument } from "../models/accountSchema";
@@ -12,6 +12,7 @@ import { CookieConsentBypass } from "../browser/cookieConsentBypass";
 import { selectModules } from "../fillers/selectModules";
 import { handleBookingConflict } from "../fillers/handleBookingConflict";
 import { getProxyIp } from "../tests/getProxyIp";
+import { launchStealthContext } from "../helper/stealth";
 
 dotenv.config();
 
@@ -124,18 +125,13 @@ const navigateWithTimeout = async (
 // context recreation pulls a new exit IP from the rotating gateway).
 const recreateContext = async (
   context: BrowserContext,
-  browser: Browser,
   auth: string | null,
   identifier: string,
 ): Promise<{ context: BrowserContext; page: Page }> => {
   await context.close();
 
-  const newContext = await browser.newContext({
-
-    extraHTTPHeaders: {
-      "Proxy-Authorization": `Basic ${auth}`,
-    },
-  });
+ const seed = Math.floor(Math.random() * 1_000_000); // new fingerprint per session
+  const newContext = await launchStealthContext(seed);
 
   const newPage = await newContext.newPage();
 
@@ -145,7 +141,6 @@ const recreateContext = async (
 
 const navigateUntilLoaded = async (
   context: BrowserContext,
-  browser: Browser,
   auth: string | null,
   page: Page,
   identifier: string,
@@ -165,7 +160,7 @@ const navigateUntilLoaded = async (
   if (alreadyRateLimited) {
     totalRateLimits++;
     sendLog(bot, chatId, identifier, `🚫 Rate limited on initial load — rotating proxy and retrying`);
-    ({ context, page } = await recreateContext(context, browser, auth, identifier));
+    ({ context, page } = await recreateContext(context, auth, identifier));
   } else if (alreadyLoaded) {
     console.log(`[${identifier}] ✅ Options page already loaded on first check`);
     return { success: true, context, page };
@@ -194,7 +189,7 @@ const navigateUntilLoaded = async (
       if (navResult.rateLimited) {
         totalRateLimits++;
 
-        ({ context, page } = await recreateContext(context, browser, auth, identifier));
+        ({ context, page } = await recreateContext(context, auth, identifier));
 
         if (canSendRateLimitPing()) {
           sendLog(bot, chatId, identifier, `🚫 Rate limits ongoing across browsers (${globalRateLimitCount} total hits so far) — proxies rotating, still trying`);
@@ -356,7 +351,6 @@ const runManualFlow = async (
 // ── Main export ─────────────────────────────────────────────────────────────
 
 const startBooking = async (
-  browser: Browser,
   context: BrowserContext,
   page: Page,
   oid: string,
@@ -380,11 +374,11 @@ const startBooking = async (
     console.log(`[${identifier}] ✅ Page body loaded within timeout`)
   } catch {
     console.warn(`[${identifier}] ⚠️ Page body still empty after 10s, relaunching the browser...`);
-    ({ context, page } = await recreateContext(context, browser, auth, identifier));
+    ({ context, page } = await recreateContext(context, auth, identifier));
   }
 
 
-  const result = await navigateUntilLoaded(context, browser, auth, page, identifier, bookingUrl, bot, chatId, timeoutMs);
+  const result = await navigateUntilLoaded(context, auth, page, identifier, bookingUrl, bot, chatId, timeoutMs);
   context = result.context;
   page = result.page;
 
