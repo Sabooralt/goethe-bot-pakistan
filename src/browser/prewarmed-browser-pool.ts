@@ -1,22 +1,19 @@
+import { Browser, BrowserContext, Page, chromium } from "playwright-core";
 import { proxyPool, USE_PROXIES } from "../proxyPool";
-import { firefox, LaunchOptions , BrowserContext, Page} from "playwright";
-import { LaunchOptions as LaunchOptions2 } from "playwright-core";
+import { Camoufox, LaunchOptions } from "camoufox";
 import { CookieConsentBypass } from "./cookieConsentBypass";
-import { getProxyIp } from "../tests/getProxyIp";
-import { enginePath, writeProfile } from "../helper/stealth";
 
 const BROWSER_COUNT = parseInt(process.env.BROWSER_COUNT || "20", 10);
 
 interface PrewarmedBrowser {
-   
+    browser: Browser;
     context: BrowserContext;
-    page: Page; 
+    page: Page;
     display: string;
     browserNumber: number;
     isReady: boolean;
     createdAt: Date;
     proxyUsed?: string;
-    auth?: string | null;
 }
 
 const activeDisplays = new Set<string>();
@@ -62,20 +59,37 @@ class PrewarmedBrowserPool {
     ): Promise<PrewarmedBrowser | null> {
         try {
             console.log(`[preWarm] Pre-warming browser ${browserNumber} on ${display}...`);
-            
+            function pickOS(): LaunchOptions["os"] {
+                const r = Math.random();
+
+                if (r < 0.7) return "windows";
+                if (r < 0.9) return "macos";
+                return "linux";
+            }
 
 
 
             const args: LaunchOptions = {
-               headless: false,
-               executablePath: enginePath(),
-               env: {
-                 DISPLAY: `:${browserNumber}`,
-               },
-             };
+                os: pickOS(),
+                geoip: true,
+                humanize: 1.5,
+                block_images: false,
+                block_webrtc: true,
+                screen: {
+                    minWidth: 1024,
+                    maxWidth: 1920,
+                    minHeight: 768,
+                    maxHeight: 1080
+                },
+                headless: false,
+                fonts: ['Arial', 'Times New Roman'],
+                env: {
+                    DISPLAY: display,
+                }
+            };
 
             const UNPROXIED_BROWSER_NUMBERS = new Set(
-                (process.env.UNPROXIED_BROWSER_NUMBERS || "8,11")
+                (process.env.UNPROXIED_BROWSER_NUMBERS || "1")
                     .split(",")
                     .map((n) => parseInt(n.trim()))
                     .filter((n) => !Number.isNaN(n))
@@ -83,12 +97,13 @@ class PrewarmedBrowserPool {
 
             let proxy: any = null;
             let proxyUrl = "";
-            let auth: string | null = null;
 
-            if (USE_PROXIES) {
+            if (UNPROXIED_BROWSER_NUMBERS.has(browserNumber)) {
+                console.log(`[proxy] Browser ${browserNumber} → intentionally unproxied (hedge browser)`);
+            } else if (USE_PROXIES) {
                 proxy = proxyPool.getNextProxy();
                 if (proxy) {
-                    proxyUrl = `${proxy.type}://${proxy.host}:${proxy.port}`;
+                    proxyUrl = `${proxy.host}:${proxy.port}`;
                     console.log(`[proxy] Proxy ${proxyUrl} → Browser ${browserNumber}`);
                 }
             }
@@ -100,48 +115,31 @@ class PrewarmedBrowserPool {
                     username: proxy.username,
                     password: proxy.password
                 };
-
-                auth = Buffer.from(`${proxy.username}:${proxy.password}`).toString("base64");
-
-                console.log({
-                    browser: browserNumber,
-                    useProxies: USE_PROXIES,
-                    argsProxy: args.proxy,
-                });
             }
-           const seed = Math.floor(Math.random() * 1_000_000)
-            const context = await firefox.launchPersistentContext(writeProfile(seed), args);
+            /*  const browser = await chromium.launch(args2) */
+            const browser = await Camoufox(args);
 
-           
-
-         
+            const context = await browser.newContext({
+            }
+            );
 
             const page = await context.newPage();
             await page.setDefaultNavigationTimeout(180000);
             await page.setDefaultTimeout(20000);
-
-
-
             await CookieConsentBypass(page, true);
-            const proxyIp = await getProxyIp(page);
-
-            console.log(`[browser ${browserNumber}] Ip: ${proxyIp}`);
             console.log(`[preWarm] Pre-warmed browser ${browserNumber}`);
-
-            await page.goto("https://goethe.de", { waitUntil: "domcontentloaded" });
 
 
 
 
             return {
-                
+                browser,
                 context,
                 page,
                 display,
                 browserNumber,
                 isReady: true,
                 createdAt: new Date(),
-                auth,
                 proxyUsed: proxyUrl,
             };
         } catch (error) {
@@ -236,7 +234,7 @@ class PrewarmedBrowserPool {
 
         if (browser) {
             try {
-                await browser.context.close();
+                await browser.browser.close();
                 this.releaseDisplay(browser.display);
                 this.browsers.delete(browserNumber);
                 console.log(`🔄 Closed browser ${browserNumber}`);

@@ -1,6 +1,6 @@
-import { Browser, BrowserContext, LaunchOptions, Page } from "playwright";
+import { Browser, BrowserContext, LaunchOptions, Page } from "playwright-core";
 import { USE_PROXIES } from "../proxyPool";
-import { launchStealthContext } from "../helper/stealth";
+import { Camoufox } from "camoufox";
 
 
 
@@ -111,9 +111,9 @@ class ExamMonitor {
         argsProxy: args.proxy,
       });
 
-      const seed = Math.floor(Math.random() * 1_000_000);
-      this.context = await launchStealthContext(seed, args);
-      this.page = await this.context!.newPage();
+      this.browser = await Camoufox(args);
+      this.context = await this.browser.newContext();
+      this.page = await this.context.newPage();
 
       await this.page.goto(TARGET_URL, {
         waitUntil: "domcontentloaded",

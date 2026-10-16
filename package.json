@@ -17,7 +17,7 @@
     "@proofofbot/client-akamai": "^3.1.1",
     "axios": "^1.13.5",
     "axios-cookiejar-support": "^7.0.0",
-    "camoufox-js": "^0.12.0",
+    "camoufox": "^0.5.8",
     "date-fns": "^4.1.0",
     "dotenv": "^17.0.1",
     "express": "^5.1.0",

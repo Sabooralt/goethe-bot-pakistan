@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { firefox , LaunchOptions} from "playwright";
+import {Camoufox ,LaunchOptions} from "camoufox"
 import { enginePath, launchStealthContext, stealthPrefs, writeProfile } from "../helper/stealth";
 
 dotenv.config();
@@ -16,19 +16,22 @@ const startBooking = async (browserNumber: number = 2) => {
 
   const args: LaunchOptions = {
     headless: false,
-    executablePath: enginePath(),
+    geoip: true,
+    os: "linux",
+    humanize: 1.5,
+
     env: {
       DISPLAY: `:${browserNumber}`,
     },
   };
-  const context = await launchStealthContext(seed,args);
+  const browser = await Camoufox(args);
 
-
+  
 
 
   
 
-  const page = await context.newPage();
+  const page = await browser.newPage();
 
  
 
@@ -47,6 +50,10 @@ const startBooking = async (browserNumber: number = 2) => {
     console.error(error);
   }
 
+
+
+
+  
  
 };
 

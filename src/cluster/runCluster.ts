@@ -162,13 +162,13 @@ export const runAllAccountsWithPrewarmedBrowsers = async (
       const chatId = user?.telegramId || null;
 
       return startBooking(
+        browser.browser,
         browser.context,
         browser.page,
         oid,
         bot,
         displayInfo,
-        chatId,
-        browser.auth,
+        chatId
       );
     });
 

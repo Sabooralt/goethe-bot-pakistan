@@ -1,6 +1,6 @@
 //Pak
 
-import { Browser, BrowserContext, Page } from "playwright";
+import { Browser, BrowserContext, Page } from "playwright-core";
 import dotenv from "dotenv";
 import type TelegramBot from "node-telegram-bot-api";
 import { AccountDocument } from "../models/accountSchema";
@@ -11,8 +11,6 @@ import { notifyBookingCompleted } from "../fillers/notifyBookingComplete";
 import { CookieConsentBypass } from "../browser/cookieConsentBypass";
 import { selectModules } from "../fillers/selectModules";
 import { handleBookingConflict } from "../fillers/handleBookingConflict";
-import { getProxyIp } from "../tests/getProxyIp";
-import { launchStealthContext } from "../helper/stealth";
 
 dotenv.config();
 
@@ -125,23 +123,21 @@ const navigateWithTimeout = async (
 // context recreation pulls a new exit IP from the rotating gateway).
 const recreateContext = async (
   context: BrowserContext,
-  auth: string | null,
-  identifier: string,
+  browser: Browser,
+  identifier: string
 ): Promise<{ context: BrowserContext; page: Page }> => {
   await context.close();
 
- const seed = Math.floor(Math.random() * 1_000_000); // new fingerprint per session
-  const newContext = await launchStealthContext(seed);
+  const newContext = await browser.newContext();
 
   const newPage = await newContext.newPage();
-
   await CookieConsentBypass(newPage, true);
   return { context: newContext, page: newPage };
 };
 
 const navigateUntilLoaded = async (
   context: BrowserContext,
-  auth: string | null,
+  browser: Browser,
   page: Page,
   identifier: string,
   bookingUrl: string,
@@ -160,7 +156,7 @@ const navigateUntilLoaded = async (
   if (alreadyRateLimited) {
     totalRateLimits++;
     sendLog(bot, chatId, identifier, `🚫 Rate limited on initial load — rotating proxy and retrying`);
-    ({ context, page } = await recreateContext(context, auth, identifier));
+    ({ context, page } = await recreateContext(context, browser, identifier));
   } else if (alreadyLoaded) {
     console.log(`[${identifier}] ✅ Options page already loaded on first check`);
     return { success: true, context, page };
@@ -189,7 +185,7 @@ const navigateUntilLoaded = async (
       if (navResult.rateLimited) {
         totalRateLimits++;
 
-        ({ context, page } = await recreateContext(context, auth, identifier));
+        ({ context, page } = await recreateContext(context, browser, identifier));
 
         if (canSendRateLimitPing()) {
           sendLog(bot, chatId, identifier, `🚫 Rate limits ongoing across browsers (${globalRateLimitCount} total hits so far) — proxies rotating, still trying`);
@@ -303,7 +299,7 @@ const runAutomatedFlow = async (
     await page.waitForLoadState("networkidle");
 
 
-
+   
 
     //Final Confirmation Page
     await page.locator("button.cs-button--arrow_next").nth(0).click();
@@ -351,20 +347,19 @@ const runManualFlow = async (
 // ── Main export ─────────────────────────────────────────────────────────────
 
 const startBooking = async (
+  browser: Browser,
   context: BrowserContext,
   page: Page,
   oid: string,
   bot: TelegramBot,
   displayInfo: DisplayInfo,
   chatId: string | null,
-  auth: string | null = null) => {
-  const timeoutMs = 5 * 60 * 60 * 1000;
+  timeoutMs = 5 * 60 * 60 * 1000
+) => {
   const identifier = `Browser ${displayInfo.displayNumber}`;
-  const bookingUrl = `https://www.goethe.de/coe/?lang=en&oid=${oid}`;
+  const bookingUrl = `https://www.goethe.de/coe/entry?lang=en&oid=${oid}`;
 
   console.log(`[${identifier}] 🔍 Title: "${await page.title()}" | URL: ${page.url()}`);
-
-  
 
   try {
     await page.waitForFunction(
@@ -374,11 +369,11 @@ const startBooking = async (
     console.log(`[${identifier}] ✅ Page body loaded within timeout`)
   } catch {
     console.warn(`[${identifier}] ⚠️ Page body still empty after 10s, relaunching the browser...`);
-    ({ context, page } = await recreateContext(context, auth, identifier));
+    ({ context, page } = await recreateContext(context, browser, identifier));
   }
 
 
-  const result = await navigateUntilLoaded(context, auth, page, identifier, bookingUrl, bot, chatId, timeoutMs);
+  const result = await navigateUntilLoaded(context, browser, page, identifier, bookingUrl, bot, chatId, timeoutMs);
   context = result.context;
   page = result.page;
 
