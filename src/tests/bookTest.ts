@@ -1,8 +1,9 @@
 import dotenv from "dotenv";
 import {Camoufox ,LaunchOptions} from "camoufox"
-import { enginePath, launchStealthContext, stealthPrefs, writeProfile } from "../helper/stealth";
 
 dotenv.config();
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 
 const startBooking = async (browserNumber: number = 2) => {
   const oid = process.env.TEST_OID;
@@ -30,25 +31,42 @@ const startBooking = async (browserNumber: number = 2) => {
 
 
   
+const context = await browser.newContext();
 
-  const page = await browser.newPage();
 
- 
+  const page = await context.newPage();
 
-  
 
-  let response;
 
-  try {
-    response = await page.goto(bookingUrl, {
+
+ console.log("1st Context opened!");
+
+ await page.goto(bookingUrl, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-  } catch (error) {
-    console.error("\n❌ NAVIGATION ERROR");
+ 
+ await delay(7000);
+ await context.close(); 
 
-    console.error(error);
-  }
+ console.log("1st Context closed!");
+
+ await browser.newContext();
+
+ console.log("new context launched!");
+
+ const newPage = await browser.newPage();
+
+ await newPage.goto(bookingUrl,{waitUntil: "domcontentloaded"});
+
+ console.log("navigated in new context")
+
+
+
+
+  
+
+  
 
 
 

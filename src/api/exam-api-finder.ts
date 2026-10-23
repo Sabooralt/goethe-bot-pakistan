@@ -1,11 +1,11 @@
-import { Browser, BrowserContext, LaunchOptions, Page } from "playwright-core";
+import { Browser, BrowserContext, Page } from "playwright-core";
 import { USE_PROXIES } from "../proxyPool";
-import { Camoufox } from "camoufox";
+import { Camoufox , LaunchOptions} from "camoufox";
 
 
 
 const TARGET_URL =
-  process.env.TARGET_URL || "https://www.goethe.de/ins/in/en/spr/prf/gzb2.cfm";
+  process.env.TARGET_URL || "https://www.goethe.de/ins/pk/en/spr/prf/gzb2.cfm";
 
 const MOCK_API_URL = "http://localhost:3001/api/mock-exam";
 
@@ -81,7 +81,9 @@ class ExamMonitor {
     }
 
     const args: LaunchOptions = {
+      geoip:true,
       headless: true,
+    
     }
 
     if (USE_PROXIES && proxyHost && username && password) {
@@ -117,13 +119,14 @@ class ExamMonitor {
 
       await this.page.goto(TARGET_URL, {
         waitUntil: "domcontentloaded",
-        timeout: 20000,
+        timeout: 30000,
       });
 
       console.log("[browser] Browser launched and ready");
       return true;
     } catch (error) {
       console.error("[browser] Failed to launch browser:", error);
+      await this.closeBrowser();
       return false;
     }
   }
@@ -179,6 +182,29 @@ class ExamMonitor {
     } catch (error) {
       console.error("[browser] Error closing browser:", error);
     }
+  }
+
+  /**
+   * Keeps trying to launch until it succeeds or polling is stopped
+   * (max-duration timer / stopPolling / forceStopPolling).
+   * Backs off 500ms, 1s, 1.5s ... capped at 3s.
+   */
+  private async launchWithRetry(): Promise<boolean> {
+    let attempt = 0;
+
+    while (!this.shouldStopPolling) {
+      attempt++;
+
+      if (await this.launchBrowser()) return true;
+
+      await this.closeBrowser();
+
+      const delay = Math.min(500 * attempt, 3000);
+      console.warn(`[browser] Launch attempt ${attempt} failed — retrying in ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+
+    return false;
   }
 
   private async browserApiCall(): Promise<ApiResponse | null> {
@@ -268,25 +294,9 @@ class ExamMonitor {
     this.pollCount = 0;
     this.pollsOnCurrentIp = 0; // reset
     this.startTime = new Date();
-
-    if (process.env.TEST_MODE !== "true" && !this.page) {
-      console.log("[startPolling] Launching browser");
-      const launched = await this.launchBrowser();
-
-      if (!launched) {
-        console.error("[startPolling] Could not launch browser");
-        if (onTimeout) await onTimeout();
-        return;
-      }
-    }
-
-    const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
-    const targetDatePKT = new Date(targetDate.getTime() + PKT_OFFSET_MS);
-    const [year, month, day] = targetDatePKT.toISOString().split("T")[0].split("-");
-    const targetBookFromDate = `${day}.${month}.${year}`;
-
     this.isPolling = true;
 
+    // Timer starts BEFORE launch so launch retries are bounded by maxDurationMs
     this.timeoutInterval = setTimeout(async () => {
       console.log(`[startPolling] Max duration reached (${maxDurationMs}ms)`);
       this.shouldStopPolling = true;
@@ -294,14 +304,40 @@ class ExamMonitor {
       this.stopPolling();
     }, maxDurationMs);
 
+    if (process.env.TEST_MODE !== "true" && !this.page) {
+      console.log("[startPolling] Launching browser");
+      const launched = await this.launchWithRetry();
+
+      if (!launched) {
+        // Only reachable if polling was stopped/timed out while retrying;
+        // the timeout timer already called onTimeout in that case.
+        console.error("[startPolling] Gave up launching browser (stopped or timed out)");
+        this.stopPolling();
+        return;
+      }
+    }
+
+    if (this.shouldStopPolling) return;
+
+    const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
+    const targetDatePKT = new Date(targetDate.getTime() + PKT_OFFSET_MS);
+    const [year, month, day] = targetDatePKT.toISOString().split("T")[0].split("-");
+    const targetBookFromDate = `${day}.${month}.${year}`;
+
     // Instant IP rotation: closes + reopens only the context (browser stays
-    // alive). Each new context gets a fresh exit IP from the rotating
-    // proxy endpoint.
+    // alive). If that fails, fall back to a full relaunch with retries.
     const rotateIp = async (): Promise<boolean> => {
       console.log(`[poll] Rotating IP after ${this.pollsOnCurrentIp} polls`);
-      const reopened = await this.reopenContext();
-      if (!reopened) {
-        console.error("[poll] Failed to rotate IP");
+
+      let ok = await this.reopenContext();
+      if (!ok) {
+        console.warn("[poll] Context reopen failed — relaunching browser with retry");
+        await this.closeBrowser();
+        ok = await this.launchWithRetry();
+      }
+
+      if (!ok) {
+        console.error("[poll] Failed to rotate IP (stopped or timed out)");
         return false;
       }
 
@@ -333,7 +369,6 @@ class ExamMonitor {
           const rotated = await rotateIp();
           if (!rotated) {
             this.stopPolling();
-            if (onTimeout) await onTimeout();
             return;
           }
           setImmediate(() => setTimeout(rapidPoll, interval));
