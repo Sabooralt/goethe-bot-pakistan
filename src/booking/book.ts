@@ -87,7 +87,7 @@ const navigateWithTimeout = async (
   page: Page,
   url: string,
   identifier: string,
-  maxAttempts = 3
+  maxAttempts = 2
 ): Promise<{ success: boolean; rateLimited: boolean }> => {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {

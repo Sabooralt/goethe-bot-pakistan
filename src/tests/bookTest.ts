@@ -17,10 +17,15 @@ const startBooking = async (browserNumber: number = 2) => {
 
   const args: LaunchOptions = {
     headless: false,
+    canvas_noise: false,
     geoip: true,
     os: "linux",
     humanize: 1.5,
-
+proxy:{
+  server: process.env.GERMANY_PROXY_HOST!,
+  username: process.env.GERMANY_PROXY_USERNAME,
+  password: process.env.GERMANY_PROXY_PASSWORD
+},
     env: {
       DISPLAY: `:${browserNumber}`,
     },
